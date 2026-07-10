@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://<filip013.github.io/engleski-korak-po-korak/",
+  "homepage": "https://filip013.github.io/engleski-korak-po-korak/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
