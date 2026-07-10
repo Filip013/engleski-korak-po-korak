@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, onSnapshot, collection, query, orderBy, limit, writeBatch, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { useGeminiTTS } from './hooks/useGeminiTTS';
@@ -91,10 +91,27 @@ export default function App() {
   const { handleSpeak, stopSpeak } = useGeminiTTS("You are a professional voice actor. Read exactly what is written. If English, use American accent. If Serbian, use Serbian accent. NEVER translate.");
 
   useEffect(() => {
-    signInAnonymously(auth).catch(console.error);
     const unsub = onAuthStateChanged(auth, setUser);
     return () => unsub();
   }, []);
+
+  const handleGoogleSignIn = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Greška pri prijavi:", error);
+      alert("Nije uspela prijava: " + error.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Greška pri odjavi:", error);
+    }
+  };
 
   // Fetch List of Episodes & Auto-select Latest
   useEffect(() => {
@@ -407,6 +424,29 @@ export default function App() {
     w.serbian.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // --- LOGIN SCREEN ---
+  if (!user) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center transition-colors duration-500 p-4 ${isDarkMode ? 'bg-zinc-950 text-zinc-300' : 'bg-stone-50 text-stone-900'}`}>
+        <div className={`max-w-md w-full p-8 rounded-3xl shadow-lg border text-center ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+          <div className="bg-blue-600 text-white p-4 rounded-2xl w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/20">
+            <Compass size={32} />
+          </div>
+          <h1 className="text-3xl font-bold mb-3 tracking-tight">Енглески за почетнике</h1>
+          <p className={`mb-8 ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>
+            Пријавите се како бисте пратили свој напредак и сачували научене речи.
+          </p>
+          <button 
+            onClick={handleGoogleSignIn}
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3"
+          >
+            Пријави се преко Google-a
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen font-sans transition-colors duration-500 flex flex-col ${isDarkMode ? 'bg-zinc-950 text-zinc-300' : 'bg-stone-50 text-stone-900'}`}>
       
@@ -435,6 +475,15 @@ export default function App() {
               <Smartphone size={16} /> Инсталирај
             </button>
           )}
+
+          <button 
+            onClick={handleSignOut}
+            className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all active:scale-95 ${
+              isDarkMode ? 'border-red-900/50 bg-red-900/20 text-red-400 hover:bg-red-900/40' : 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+            }`}
+          >
+            Одјави се
+          </button>
 
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
