@@ -1,16 +1,71 @@
-# React + Vite
+# Енглески за почетнике (English for Beginners)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Апликација за учење енглеског језика прилагођена изворним говорницима српског језика (нарочито почетницима A1-A2 нивоа). Апликација користи вештачку интелигенцију (Google Gemini) за генерисање лекција, вежби, изговор и гласовног асистента у реалном времену.
 
-Currently, two official plugins are available:
+Посетите пројекат уживо: [https://filip013.github.io/engleski-korak-po-korak/](https://filip013.github.io/engleski-korak-po-korak/)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 🚀 Кључне функционалности
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+*   **Лекције (Studio)**: Динамичко креирање нових лекција на основу произвољно унете теме. Систем узима у обзир претходни напредак и већ научене речи како би конципирао нове лекције.
+*   **Дијалог и Граматика (Reading)**: Читање кратких, практичних разговора и разјашњења граматичких правила на српском језику.
+*   **Слушање и понављање (Drills)**: Аудио вежбе са променљивим гласовима (мушки и женски енглески акценат) за вежбање изговора.
+*   **Квизови (Quiz)**: Интерактивни тестови за слагање реченица од понуђених речи (превод са српског и вежбе слушања).
+*   **Лични Речник (Dictionary)**: База свих речи које су научене кроз лекције, са транскрипцијом изговора и значењем.
+*   **АИ Асистент (Live Voice Assistant)**: Разговор у реалном времену са АИ асистентом преко микрофона који може да пружи помоћ у вези са лекцијом или речником.
+*   **ПВА Подршка (Progressive Web App)**: Могућност инсталације на паметне телефоне или десктоп уређаје за брзи приступ.
 
-## Expanding the Oxlint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## 🛠️ Технолошки Стек
+
+*   **Коре**: [React 19](https://react.dev/) + [Vite](https://vite.dev/)
+*   **Дизајн и Стилизовање**: [Tailwind CSS v4](https://tailwindcss.com/) & [Lucide React](https://lucide.dev/) за иконице.
+*   **База и Ауторизација**: [Google Firebase](https://firebase.google.com/) (Firestore за напредак/речник и Google Auth за пријаву).
+*   **АИ Модели (Google Gemini API)**:
+    *   `gemini-3.5-flash` за генерацију структурираног JSON садржаја лекција.
+    *   `gemini-3.1-flash-live-preview` за мултимодалног гласовног асистента у реалном времену (преко WebSockets-а).
+    *   Генерација аудио записа (Text-to-Speech) преко Gemini аудио модалитета.
+
+---
+
+## 💻 Локални развој и покретање
+
+Да бисте покренули пројекат локално:
+
+1.  Клонирајте спремиште:
+    ```bash
+    git clone https://github.com/Filip013/engleski-korak-po-korak.git
+    cd engleski-korak-po-korak
+    ```
+
+2.  Инсталирајте зависности:
+    ```bash
+    npm install
+    ```
+
+3.  Подесите своје Firebase конфигурације у фајлу `src/firebase.js`.
+
+4.  Покрените локални развојни сервер:
+    ```bash
+    npm run dev
+    ```
+
+5.  Да бисте користили АИ функционалности (креирање лекција и гласовни асистент), унесите свој **Gemini API Key** у напредна подешавања апликације (опција *Напредна / Техничка подешавања* -> *Постави API кључ*).
+
+---
+
+## 🚢 Продукциони билд и деплојмент
+
+За израду продукционе верзије и објаву на GitHub Pages:
+
+*   Билдовање:
+    ```bash
+    npm run build
+    ```
+
+*   Деплојмент (након успешне конфигурације `homepage` у `package.json`):
+    ```bash
+    npm run deploy
+    ```
