@@ -54,7 +54,7 @@ export function useGeminiLiveAssistant() {
 
     const startAssistant = useCallback(async (initialContext) => {
         const myKey = localStorage.getItem('geminiApiKey');
-        if (!myKey) { alert("API ključ je neophodan."); return; }
+        if (!myKey) { alert("API кључ је неопходан."); return; }
 
         setIsConnecting(true);
 
@@ -63,7 +63,7 @@ export function useGeminiLiveAssistant() {
                 audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
             });
         } catch (e) {
-            alert("Moraš dozvoliti pristup mikrofonu za glasovnog asistenta.");
+            alert("Мораш дозволити приступ микрофону за гласовног асистента.");
             setIsConnecting(false);
             return;
         }
@@ -113,7 +113,7 @@ export function useGeminiLiveAssistant() {
                 // Initial prompt to start the conversation
                 ws.current.send(JSON.stringify({
                     realtimeInput: {
-                        text: "Upravo te pozivam u pomoć. Ukratko me pozdravi na srpskom i pitaj me u vezi čega mi treba pomoć iz priloženog konteksta."
+                        text: "Управо те позивам у помоћ. Укратко ме поздрави на српском и питај ме у вези чега ми треба помоћ из приложеног контекста."
                     }
                 }));
 
@@ -164,7 +164,7 @@ export function useGeminiLiveAssistant() {
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({
                 realtimeInput: {
-                    text: `(Sistemska poruka): Korisnik je upravo kliknuo na novu stavku. Evo novog konteksta: ${JSON.stringify(newContext)}. Ukratko potvrdi da pratiš.`
+                    text: `(Системска порука): Корисник је управо кликнуо на нову ставку. Ево новог контекста: ${JSON.stringify(newContext)}. Укратко потврди да пратиш.`
                 }
             }));
         } else {

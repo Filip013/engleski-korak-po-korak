@@ -100,8 +100,8 @@ export default function App() {
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error("Greška pri prijavi:", error);
-      alert("Nije uspela prijava: " + error.message);
+      console.error("Грешка при пријави:", error);
+      alert("Није успела пријава: " + error.message);
     }
   };
 
@@ -109,7 +109,7 @@ export default function App() {
     try {
       await signOut(auth);
     } catch (error) {
-      console.error("Greška pri odjavi:", error);
+      console.error("Грешка при одјави:", error);
     }
   };
 
@@ -243,13 +243,13 @@ export default function App() {
       setTopicInput('');
       setActiveTab('reading');
     } catch (e) {
-      alert("Greška pri kreiranju lekcije. Proverite JSON format.");
+      alert("Грешка при креирању лекције. Проверите JSON формат.");
       console.error(e);
     }
   };
 
   const buildPrompt = async () => {
-    const finalTopic = topicInput.trim() || "Generiši lekciju po svom izboru";
+    const finalTopic = topicInput.trim() || "Генериши лекцију по свом избору";
     const flatLexicon = dictionary.map(w => w.english).join(', ');
     
     let pastContext = '';
@@ -344,7 +344,7 @@ export default function App() {
 
   const handleGenerate = async () => {
     const key = localStorage.getItem('geminiApiKey');
-    if (!key) { alert("Unesite API ključ u Advanced postavkama."); return; }
+    if (!key) { alert("Унесите API кључ у напредним подешавањима."); return; }
     
     setIsGenerating(true);
     try {
@@ -359,7 +359,7 @@ export default function App() {
       });
       const data = await res.json();
       await processJSON(data.candidates[0].content.parts[0].text);
-    } catch (err) { alert("Greška: " + err.message); } 
+    } catch (err) { alert("Грешка: " + err.message); } 
     finally { setIsGenerating(false); }
   };
 
@@ -387,7 +387,7 @@ export default function App() {
       setActiveEpisodeId(nextEp ? nextEp.id : null);
       if (!nextEp) setActiveEpisode(null);
     } catch (e) { 
-      alert("Greška pri brisanju."); 
+      alert("Грешка при брисању."); 
       console.error(e); 
     }
   };  
@@ -440,7 +440,7 @@ export default function App() {
             onClick={handleGoogleSignIn}
             className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3"
           >
-            Пријави се преко Google-a
+            Пријави се преко Google-а
           </button>
         </div>
       </div>
@@ -530,7 +530,7 @@ export default function App() {
               
               <textarea 
                 value={topicInput} onChange={e => setTopicInput(e.target.value)} disabled={isGenerating}
-                placeholder="Generiši lekciju po svom izboru..." 
+                placeholder="Генериши лекцију по свом избору..." 
                 className={`w-full max-w-xl mx-auto block p-4 rounded-2xl border-2 text-lg focus:outline-none focus:border-blue-500 min-h-[100px] mb-6 ${isDarkMode ? 'bg-zinc-950 border-zinc-700 text-zinc-100' : 'bg-stone-50 border-stone-200'}`} 
               />
               
@@ -562,22 +562,22 @@ export default function App() {
             {/* Advanced Admin Tools */}
             <div className="mt-12 pt-8 border-t border-dashed border-stone-300 dark:border-zinc-800">
               <button onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-2 text-stone-400 hover:text-stone-600 font-bold mx-auto">
-                <Settings size={18} /> Advanced / Техничка подешавања
+                <Settings size={18} /> Напредна / Техничка подешавања
               </button>
               {showAdvanced && (
                 <div className={`mt-6 p-6 rounded-2xl border flex flex-wrap gap-4 justify-center ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-stone-100 border-stone-200'}`}>
-                  <button onClick={() => { const key = prompt("Unesite API Key:"); if(key) localStorage.setItem('geminiApiKey', key); }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold">
-                    Postavi API Ključ
+                  <button onClick={() => { const key = prompt("Унесите API кључ:"); if(key) localStorage.setItem('geminiApiKey', key); }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold">
+                    Постави API кључ
                   </button>
                   <button onClick={handleExportPrompt} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
-                    <Download size={16}/> Export Prompt
+                    <Download size={16}/> Извези промпт
                   </button>
-                  <button onClick={async () => { try { const txt = await navigator.clipboard.readText(); processJSON(txt); } catch(e) { alert("Greška pri čitanju JSON-a"); } }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
-                    <ClipboardPaste size={16}/> Paste JSON
+                  <button onClick={async () => { try { const txt = await navigator.clipboard.readText(); processJSON(txt); } catch(e) { alert("Грешка при читању JSON-а"); } }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
+                    <ClipboardPaste size={16}/> Налепи JSON
                   </button>
                   {activeEpisodeId && (
                     <button onClick={handleDeleteEpisode} className="px-4 py-2 bg-red-900/30 text-red-500 border border-red-900 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-red-900/50">
-                      <Trash2 size={16}/> Obriši Lekciju
+                      <Trash2 size={16}/> Обриši лекцију
                     </button>
                   )}
                 </div>
@@ -873,7 +873,7 @@ export default function App() {
             <button 
               onClick={stopAssistant}
               className={`p-3 rounded-full transition-colors ${isDarkMode ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-stone-100 text-stone-400 hover:text-stone-800'}`}
-              title="Ugasi asistenta"
+              title="Угаси асистента"
             >
               <X size={20} />
             </button>

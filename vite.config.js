@@ -14,5 +14,5 @@ export default defineConfig({
       }
     })
   ],
-  base: '/engleski-korak-po-korak/'
+  base: '/engleski-korak-po-korak/',
 })
