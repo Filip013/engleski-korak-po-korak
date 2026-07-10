@@ -1,25 +1,31 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, onSnapshot, collection, query, orderBy, limit, writeBatch, deleteDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, collection, query, orderBy, limit, writeBatch, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { useGeminiTTS } from './hooks/useGeminiTTS';
+import { useGeminiLiveAssistant } from './hooks/useGeminiLiveAssistant';
+import { usePWAInstall } from './hooks/usePWAInstall';
 import { 
   BookOpen, Volume2, Pause, Lightbulb, CheckCircle, Search, Tag, 
   Hash, Sun, Moon, Check, Compass, Layers, MessageSquare, MessageCircle, 
-  Eye, Loader2, Play, Settings, ClipboardPaste, Download, Trash2
+  Eye, Loader2, Play, Settings, ClipboardPaste, Download, Trash2,
+  HelpCircle, X, Send, Bot, Mic, MicOff, AudioLines, Smartphone
 } from 'lucide-react';
 
 const APP_ID = 'english-serbian-seniors';
 const SYSTEM_PROMPT = `You are an expert English language tutor creating highly structured lessons for native Serbian speakers (absolute beginners A1). 
         
 CRITICAL RULES:
-1. NEW WORDS: Present EXACTLY 5 NEW WORDS to teach, PLUS any additional words the user explicitly requests.
-2. KNOWN VOCABULARY: The Dialog, Grammar, Drills, and Quiz MUST NOT contain any unknown English words outside the provided 'KNOWN VOCABULARY' list + the 5 new target words.
+1. NEW WORDS: Present around 5 NEW WORDS to teach, PLUS any additional words the user explicitly requests.
+2. KNOWN VOCABULARY: The Dialog, Grammar, Drills, and Quiz MUST NOT contain any unknown English words outside the provided 'KNOWN VOCABULARY' list + the new target words.
 3. TONE & DIFFICULTY: Keep sentences short, practical, and polite. Everyday situations.
-4. DIALOG: A realistic 4-line conversation ('dialog' array) using known words and the new words. Assign gender ("M" or "F").
-5. GRAMMAR: Provide 2-3 short, simple rules in Serbian explaining the concepts used in the dialog.
-6. DRILLS: Exactly 10 sentences for listen-and-repeat. Mix new words and known vocabulary. Assign gender.
-7. QUIZ: Exactly 10 questions testing grammar and vocabulary. Target is the correct English sentence. 'options' must contain correct scrambled words + 3 distractors. Assign gender.
+4. DIALOG: A realistic short conversation ('dialog' array) using known words and the new words. Assign gender ("M" or "F").
+5. GRAMMAR: Provide several short, simple rules in Serbian explaining the concepts used in the dialog.
+6. DRILLS: Exactly 20 sentences for listen-and-repeat. Mix new words and known vocabulary. Assign gender.
+7. QUIZ: Exactly 20 questions. Create 10 alternating pairs (1 'listening' followed by 1 'translation'). 
+   - 'translation' type: 'prompt' is a Serbian sentence to translate.
+   - 'listening' type: 'prompt' MUST literally be "Слушајте и сложите реченицу."
+   For BOTH types: 'target' is the correct English sentence to assemble. 'options' must contain correct scrambled words + 3 distractors. Assign gender and the 'type' field.
 8. OUTPUT: Strictly output valid JSON. No markdown formatting.`;
 
 const JSON_SCHEMA = `{
@@ -28,7 +34,7 @@ const JSON_SCHEMA = `{
   "dialog": [{ "speaker": "Ана", "en": "English", "sr": "Serbian", "gender": "F" }],
   "grammar": [{ "title": "Concept", "explanation": "Rule in Serbian" }],
   "drills": [{ "en": "English sentence", "sr": "Serbian translation", "gender": "M" }],
-  "quiz": [{ "prompt": "Serbian to translate", "target": "Correct English", "options": ["word1", "word2", "wrong1"], "gender": "F" }],
+  "quiz": [{ "type": "translation", "prompt": "Serbian to translate", "target": "Correct English", "options": ["word1", "word2", "wrong1"], "gender": "F" }],
   "newLemmas": [{ "english": "word", "pronunciation": "wɜːrd", "serbian": "реч", "pos": "Именица" }]
 }`;
 
@@ -54,6 +60,34 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [playingId, setPlayingId] = useState(null);
 
+  const { isInstallable, installPWA } = usePWAInstall();
+
+  // --- AI VOICE ASSISTANT SETUP ---
+  const [helpContext, setHelpContext] = useState(null);
+  
+  // We will define this hook at the very bottom of the file
+  const { 
+    isActive: isAiActive, 
+    isConnecting: isAiConnecting, 
+    isSpeaking: isAiSpeaking, 
+    startAssistant, 
+    stopAssistant, 
+    updateContext 
+  } = useGeminiLiveAssistant();
+
+  const openHelp = (contextData) => {
+    setHelpContext(contextData);
+    stopSpeak(); // Stop any reading/drills currently playing
+    
+    if (isAiActive || isAiConnecting) {
+        // If already listening, just quietly swap the AI's context
+        updateContext(contextData);
+    } else {
+        // Turn on mic and connect to WS
+        startAssistant(contextData);
+    }
+  };
+
   const { handleSpeak, stopSpeak } = useGeminiTTS("You are a professional voice actor. Read exactly what is written. If English, use American accent. If Serbian, use Serbian accent. NEVER translate.");
 
   useEffect(() => {
@@ -61,6 +95,39 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, setUser);
     return () => unsub();
   }, []);
+
+  // Fetch List of Episodes & Auto-select Latest
+  useEffect(() => {
+    if (!user) {
+      setEpisodesList([]);
+      return;
+    }
+    
+    const epQuery = query(
+      collection(db, 'artifacts', APP_ID, 'users', user.uid, 'episodes'),
+      orderBy('timestamp', 'desc')
+    );
+    
+    const unsub = onSnapshot(epQuery, (snapshot) => {
+      const eps = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        title: doc.data().title,
+        timestamp: doc.data().timestamp 
+      }));
+      
+      setEpisodesList(eps);
+      
+      // If no episode is currently selected, auto-select the most recent one
+      setActiveEpisodeId(prevId => {
+        if (!prevId && eps.length > 0) {
+          return eps[0].id;
+        }
+        return prevId;
+      });
+    });
+
+    return () => unsub();
+  }, [user]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -83,25 +150,8 @@ export default function App() {
     });
     
     const unsubProg = onSnapshot(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), (snap) => {
-      if (snap.exists()) setProgress({ mastered: {}, quizAnswers: {}, quizGraded: {}, ...snap.data() });
-      else setProgress({ mastered: {}, quizAnswers: {}, quizGraded: {} });
-    });
-
-    return () => { unsubEp(); unsubProg(); };
-  }, [activeEpisodeId, user]);
-
-  // Fetch Active Episode Data & Progress
-  useEffect(() => {
-    if (!user || !activeEpisodeId) { setActiveEpisode(null); return; }
-    
-    const unsubEp = onSnapshot(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'episodes', activeEpisodeId), (snap) => {
-      if (snap.exists()) setActiveEpisode({ id: snap.id, ...snap.data() });
-    });
-    
-    const unsubProg = onSnapshot(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), (snap) => {
-      if (snap.exists()) setProgress({ mastered: {}, quizAnswers: {}, quizGraded: {}, ...snap.data() });
-      else setProgress({ mastered: {}, quizAnswers: {}, quizGraded: {} });
-      setDrillRevealed({});
+      if (snap.exists()) setProgress({ mastered: {}, quizAnswers: {}, quizGraded: {}, quizAttempts: {}, ...snap.data() });
+      else setProgress({ mastered: {}, quizAnswers: {}, quizGraded: {}, quizAttempts: {} });
     });
 
     return () => { unsubEp(); unsubProg(); };
@@ -125,20 +175,30 @@ export default function App() {
     });
   };
 
-  const updateQuizState = async (qId, selectedIds, isCorrect = null) => {
+  const updateQuizState = async (qId, selectedIds, isCorrect = null, attemptText = null) => {
     setProgress(prev => {
         const next = { 
             ...prev, 
-            quizAnswers: { ...prev.quizAnswers, [qId]: selectedIds } 
+            quizAnswers: { ...prev.quizAnswers, [qId]: selectedIds },
+            quizAttempts: prev.quizAttempts || {} 
         };
         if (isCorrect !== null) {
             next.quizGraded = { ...prev.quizGraded, [qId]: isCorrect ? 'correct' : 'incorrect' };
-        } else if (prev.quizGraded[qId] === 'incorrect') {
+            if (!isCorrect && attemptText) {
+                next.quizAttempts = { ...next.quizAttempts, [qId]: attemptText };
+            }
+        } else if (prev.quizGraded?.[qId] === 'incorrect') {
             const newGraded = { ...prev.quizGraded };
             delete newGraded[qId];
             next.quizGraded = newGraded;
         }
-        setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), { quizAnswers: next.quizAnswers, quizGraded: next.quizGraded }, { merge: true });
+        
+        setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), { 
+            quizAnswers: next.quizAnswers, 
+            quizGraded: next.quizGraded,
+            quizAttempts: next.quizAttempts
+        }, { merge: true });
+        
         return next;
     });
   };
@@ -176,34 +236,74 @@ export default function App() {
     const flatLexicon = dictionary.map(w => w.english).join(', ');
     
     let pastContext = '';
-    const pastEps = [...episodesList].reverse();
     
-    const progressPromises = pastEps.map(ep => getDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', ep.id)));
-    const progressSnaps = await Promise.all(progressPromises);
-    
-    for (let i = 0; i < pastEps.length; i++) {
-      const ep = pastEps[i];
-      const progSnap = progressSnaps[i];
-      const prog = progSnap.exists() ? progSnap.data() : {};
+    try {
+      // 1. Fetch exactly the last 10 episodes directly from Firestore
+      const epQuery = query(
+        collection(db, 'artifacts', APP_ID, 'users', user.uid, 'episodes'),
+        orderBy('timestamp', 'desc'),
+        limit(10)
+      );
       
-      let epContext = '';
-      if (ep.title) epContext += `Lesson Title: ${ep.title}\n`;
+      const epSnapshot = await getDocs(epQuery);
       
-      if (ep.quiz) {
-        let quizDetails = [];
-        ep.quiz.forEach((q, qIdx) => {
-          const qId = `q${qIdx}`;
-          if (prog.quizGraded?.[qId] === 'incorrect') {
-              quizDetails.push(`- Failed Q: "${q.prompt}" -> Correct Target: "${q.target}"`);
-          }
-        });
-        if (quizDetails.length > 0) epContext += `Quiz Mistakes:\n${quizDetails.join('\n')}\n`;
+      // Reverse so the oldest of the 10 is first, and the most recent is last (chronological order)
+      const recentEpisodes = epSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
+      
+      // 2. Fetch the corresponding user progress for these 10 episodes
+      const progressPromises = recentEpisodes.map(ep => 
+        getDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', ep.id))
+      );
+      const progressSnaps = await Promise.all(progressPromises);
+      
+      // 3. Build the context string
+      for (let i = 0; i < recentEpisodes.length; i++) {
+        const ep = recentEpisodes[i];
+        const progSnap = progressSnaps[i];
+        const prog = progSnap.exists() ? progSnap.data() : {};
+        
+        let epContext = '';
+        if (ep.title) epContext += `Lesson Title: ${ep.title}\n`;
+        
+        // Include the entire Dialog (English ONLY)
+        if (ep.dialog && ep.dialog.length > 0) {
+          epContext += `Dialog (English):\n${ep.dialog.map(d => `${d.speaker}: ${d.en}`).join('\n')}\n`;
+        }
+        
+        // Include Drills (English ONLY)
+        if (ep.drills && ep.drills.length > 0) {
+          epContext += `Drills (English):\n${ep.drills.map(d => `- ${d.en}`).join('\n')}\n`;
+        }
+        
+        // Include the Quiz (Target sentence, options/distractors, and graded result)
+        if (ep.quiz && ep.quiz.length > 0) {
+          let quizDetails = [];
+          ep.quiz.forEach((q, qIdx) => {
+            const qId = `q${qIdx}`;
+            const status = prog.quizGraded?.[qId];
+            
+            let resultTxt = 'Not answered';
+            if (status === 'correct') resultTxt = 'Correct';
+            if (status === 'incorrect') {
+              const wrongAttempt = prog.quizAttempts?.[qId] || "unknown sequence";
+              resultTxt = `Incorrect. The user answered: "${wrongAttempt}"`;
+            }
+            
+            const optionsStr = q.options ? q.options.join(', ') : '';
+            const qType = q.type || 'translation';
+            quizDetails.push(`- Type: ${qType} | Target: "${q.target}" | Options: [${optionsStr}] | Result: ${resultTxt}`);
+          });
+          if (quizDetails.length > 0) epContext += `Quiz Performance:\n${quizDetails.join('\n')}\n`;
+        }
+        
+        if (epContext) pastContext += `\n--- Past Episode ---\n${epContext}`;
       }
-      if (epContext) pastContext += `\n--- Past Episode ---\n${epContext}`;
+    } catch (error) {
+      console.error("Error building past context:", error);
     }
 
     const knownVocabBlock = flatLexicon ? `\nKNOWN VOCABULARY:\n[${flatLexicon}]\n` : '\nKNOWN VOCABULARY:\n[None yet, this is the first lesson.]\n';
-    const pastContextBlock = pastContext ? `\nRECENT CONTEXT & PERFORMANCE:\n${pastContext}\n` : '';
+    const pastContextBlock = pastContext ? `\nRECENT CONTEXT & PERFORMANCE (Last 10 lessons):\n${pastContext}\n` : '';
     
     return `SYSTEM INSTRUCTION:\n${SYSTEM_PROMPT}\n${knownVocabBlock}${pastContextBlock}\nUSER REQUEST:\n${finalTopic}\n\nOUTPUT FORMAT:\n${JSON_SCHEMA}`;
   };
@@ -293,7 +393,9 @@ export default function App() {
     const selectedIds = progress.quizAnswers[q.id] || [];
     const selectedText = selectedIds.map(id => q.wordObjects.find(w => w.id === id).text).join(' ');
     const isCorrect = selectedText === q.cleanTarget;
-    updateQuizState(q.id, selectedIds, isCorrect);
+    
+    // Pass the actual assembled text so we can log the mistake
+    updateQuizState(q.id, selectedIds, isCorrect, selectedText);
     
     if (isCorrect) {
       handlePlayAudio(`quiz-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }]);
@@ -308,7 +410,7 @@ export default function App() {
   return (
     <div className={`min-h-screen font-sans transition-colors duration-500 flex flex-col ${isDarkMode ? 'bg-zinc-950 text-zinc-300' : 'bg-stone-50 text-stone-900'}`}>
       
-      {/* 1. Top Navigation Bar (Logo & Dark Mode) */}
+      {/* 1. Top Navigation Bar */}
       <nav className={`py-4 px-6 border-b flex items-center justify-between sticky top-0 z-50 transition-colors duration-300 ${isDarkMode ? 'bg-zinc-900/90 border-zinc-800' : 'bg-white/90 border-stone-200 backdrop-blur-md'}`}>
         <div className="flex items-center gap-3">
           <div className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-900/20">
@@ -323,6 +425,17 @@ export default function App() {
               {activeEpisode.title || 'Активна лекција'}
             </span>
           )}
+          
+          {/* NEW PWA INSTALL BUTTON */}
+          {isInstallable && (
+            <button 
+              onClick={installPWA}
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm font-bold rounded-full bg-blue-600 text-white hover:bg-blue-500 transition-all active:scale-95 shadow-md shadow-blue-600/20"
+            >
+              <Smartphone size={16} /> Инсталирај
+            </button>
+          )}
+
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
             className={`p-2 rounded-full border transition-all active:scale-90 ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-blue-400' : 'bg-stone-50 border-stone-200 text-blue-600'}`}
@@ -436,9 +549,21 @@ export default function App() {
              <section className={`p-6 md:p-8 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
                 <div className="flex items-center justify-between mb-8 border-b pb-4 dark:border-zinc-800">
                   <h2 className="text-2xl font-bold flex items-center gap-2"><MessageCircle className="text-blue-600"/> Дијалог</h2>
-                  <button onClick={() => handlePlayAudio('dialog-full', activeEpisode.dialog.map(l => ({ text: l.en, voice: l.gender === 'M' ? 'Puck' : 'Leda' })))} className={`p-3 rounded-full ${playingId === 'dialog-full' ? 'bg-blue-100 text-blue-600' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>
-                    {playingId === 'dialog-full' ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => openHelp({ tip: 'full_dialog', dialog: activeEpisode.dialog })} 
+                      className={`p-3 rounded-full transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                      title="Питај АИ о овом дијалогу"
+                    >
+                      <HelpCircle size={20} />
+                    </button>
+                    <button 
+                      onClick={() => handlePlayAudio('dialog-full', activeEpisode.dialog.map(l => ({ text: l.en, voice: l.gender === 'M' ? 'Puck' : 'Leda' })))} 
+                      className={`p-3 rounded-full ${playingId === 'dialog-full' ? 'bg-blue-100 text-blue-600' : 'bg-stone-100 text-stone-600 hover:bg-stone-200 dark:bg-zinc-800 dark:text-zinc-300'}`}
+                    >
+                      {playingId === 'dialog-full' ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-6">
                   {activeEpisode.dialog?.map((line, idx) => {
@@ -458,7 +583,16 @@ export default function App() {
 
              {/* Grammar */}
              <section className={`p-6 md:p-8 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
-                <h2 className="text-2xl font-bold flex items-center gap-2 mb-6 border-b pb-4 dark:border-zinc-800"><Lightbulb className="text-amber-500"/> Објашњења</h2>
+                <div className="flex items-center justify-between mb-6 border-b pb-4 dark:border-zinc-800">
+                  <h2 className="text-2xl font-bold flex items-center gap-2"><Lightbulb className="text-amber-500"/> Објашњења</h2>
+                  <button 
+                    onClick={() => openHelp({ tip: 'full_grammar', grammar: activeEpisode.grammar })} 
+                    className={`p-3 rounded-full transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                    title="Питај АИ о граматици"
+                  >
+                    <HelpCircle size={20} />
+                  </button>
+                </div>
                 <div className="space-y-6">
                   {activeEpisode.grammar?.map((item, idx) => (
                     <div key={idx}>
@@ -507,12 +641,22 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                    <button 
-                      onClick={() => handlePlayAudio(dId, [{ text: drill.en, voice: v }, { text: drill.sr, voice: v }, { text: drill.en, voice: v }], () => markDrillCompleted(dId))}
-                      className={`p-4 rounded-full border shrink-0 ${playingId === dId ? 'bg-blue-100 text-blue-600 border-blue-200' : (isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-stone-50 text-stone-600 hover:bg-stone-100')}`}
-                    >
-                      {playingId === dId ? <Pause size={20} /> : <Volume2 size={20} />}
-                    </button>
+                    
+                    {/* Play and Help Buttons Wrapper */}
+                    <div className="flex gap-2 shrink-0">
+                      <button 
+                        onClick={() => openHelp({ tip: 'drill', ...drill })}
+                        className={`p-4 rounded-full border transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 border-zinc-700 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}
+                      >
+                        <HelpCircle size={20} />
+                      </button>
+                      <button 
+                        onClick={() => handlePlayAudio(dId, [{ text: drill.en, voice: v }, { text: drill.sr, voice: v }, { text: drill.en, voice: v }], () => markDrillCompleted(dId))}
+                        className={`p-4 rounded-full border ${playingId === dId ? 'bg-blue-100 text-blue-600 border-blue-200' : (isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-stone-50 text-stone-600 hover:bg-stone-100')}`}
+                      >
+                        {playingId === dId ? <Pause size={20} /> : <Volume2 size={20} />}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -528,11 +672,16 @@ export default function App() {
               <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>Сложите речи у реченицу.</p>
             </header>
 
-            {quizData.map((q, idx) => {
+           {quizData.map((q, idx) => {
               const status = progress.quizGraded[q.id]; 
               const selectedWordIds = progress.quizAnswers[q.id] || [];
               const availableWords = q.wordObjects.filter(w => !selectedWordIds.includes(w.id));
               
+              // Figure out exactly what string the user has built so far
+              const currentAttemptText = selectedWordIds
+                .map(id => q.wordObjects.find(w => w.id === id)?.text)
+                .filter(Boolean).join(' ');
+
               const selectWord = (wId) => {
                 if (status === 'correct') return;
                 updateQuizState(q.id, [...selectedWordIds, wId]);
@@ -545,8 +694,36 @@ export default function App() {
 
               return (
                 <div key={q.id} className={`p-6 rounded-3xl border shadow-sm ${status === 'correct' ? (isDarkMode ? 'bg-emerald-900/20 border-emerald-500/50' : 'bg-emerald-50 border-emerald-200') : status === 'incorrect' ? (isDarkMode ? 'bg-red-900/20 border-red-500/50' : 'bg-red-50 border-red-200') : (isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200')}`}>
-                  <p className="text-xl font-medium mb-6 flex gap-3"><span className="opacity-40">{idx + 1}.</span> {q.prompt}</p>
-
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl opacity-40 font-medium">{idx + 1}.</span>
+                      {(!q.type || q.type === 'translation') ? (
+                        <span className="text-xl font-medium">{q.prompt}</span>
+                      ) : (
+                        <button 
+                          onClick={() => handlePlayAudio(`quiz-listen-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }])}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all active:scale-95 ${
+                            playingId === `quiz-listen-${q.id}` 
+                              ? 'bg-blue-600 text-white' 
+                              : (isDarkMode ? 'bg-blue-900/30 text-blue-400 hover:bg-blue-900/50' : 'bg-blue-100 text-blue-700 hover:bg-blue-200')
+                          }`}
+                        >
+                          {playingId === `quiz-listen-${q.id}` ? <Pause size={20} /> : <Volume2 size={20} />}
+                          {q.prompt || "Слушајте и сложите реченицу"}
+                        </button>
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => openHelp({ 
+                        tip: 'quiz', 
+                        ...q, 
+                        userCurrentAnswer: currentAttemptText || "Ништа још није унето." 
+                      })} 
+                      className={`p-2 rounded-full transition-all hover:scale-110 ${isDarkMode ? 'text-blue-400 bg-blue-900/20 hover:bg-blue-900/40' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                    >
+                      <HelpCircle size={20} />
+                    </button>
+                  </div>
                   {status === 'correct' ? (
                     <div className="p-4 rounded-xl bg-emerald-100/50 border border-emerald-300 mb-6">
                        <p className="text-2xl font-medium text-emerald-700 dark:text-emerald-400">{q.target}</p>
@@ -619,6 +796,38 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* --- FLOATING VOICE ASSISTANT --- */}
+        {(isAiActive || isAiConnecting) && (
+          <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-4 p-4 rounded-[2rem] shadow-2xl transition-all animate-in slide-in-from-bottom-10 border ${isDarkMode ? 'bg-zinc-900/90 border-zinc-700 backdrop-blur-md' : 'bg-white/90 border-stone-200 backdrop-blur-md'}`}>
+            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white relative shadow-lg shadow-blue-900/20">
+              {isAiConnecting ? (
+                <Loader2 className="animate-spin" size={26} />
+              ) : isAiSpeaking ? (
+                <AudioLines className="animate-pulse" size={26} />
+              ) : (
+                <Mic className="animate-pulse opacity-80" size={26} />
+              )}
+              {/* Status Indicator Dot */}
+              <div className={`absolute top-0 right-0 w-3.5 h-3.5 rounded-full border-2 ${isDarkMode ? 'border-zinc-900' : 'border-white'} ${isAiConnecting ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+            </div>
+
+            <div className="flex flex-col pr-2 min-w-[120px]">
+              <span className={`font-bold text-sm ${isDarkMode ? 'text-zinc-100' : 'text-stone-800'}`}>АИ Асистент</span>
+              <span className={`text-xs ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>
+                {isAiConnecting ? 'Повезивање...' : isAiSpeaking ? 'Говори...' : 'Слуша...'}
+              </span>
+            </div>
+
+            <button 
+              onClick={stopAssistant}
+              className={`p-3 rounded-full transition-colors ${isDarkMode ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-stone-100 text-stone-400 hover:text-stone-800'}`}
+              title="Ugasi asistenta"
+            >
+              <X size={20} />
+            </button>
           </div>
         )}
 
