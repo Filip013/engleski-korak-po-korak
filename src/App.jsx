@@ -59,6 +59,7 @@ export default function App() {
   const [drillRevealed, setDrillRevealed] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [playingId, setPlayingId] = useState(null);
+  const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('geminiApiKey') || '');
 
   const { isInstallable, installPWA } = usePWAInstall();
 
@@ -94,6 +95,34 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, setUser);
     return () => unsub();
   }, []);
+
+  // Sync Gemini API key from Firestore and keep local storage in sync as a cache for hooks
+  useEffect(() => {
+    if (!user) {
+      setGeminiApiKey('');
+      return;
+    }
+
+    const userDocRef = doc(db, 'artifacts', APP_ID, 'users', user.uid);
+    const unsub = onSnapshot(userDocRef, async (docSnap) => {
+      const localKey = localStorage.getItem('geminiApiKey');
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.geminiApiKey) {
+          setGeminiApiKey(data.geminiApiKey);
+          localStorage.setItem('geminiApiKey', data.geminiApiKey);
+        } else if (localKey) {
+          // Upload local key to Firestore if Firestore doesn't have it yet
+          await setDoc(userDocRef, { geminiApiKey: localKey }, { merge: true });
+        }
+      } else if (localKey) {
+        // Create user document with local key if it doesn't exist
+        await setDoc(userDocRef, { geminiApiKey: localKey }, { merge: true });
+      }
+    });
+
+    return () => unsub();
+  }, [user]);
 
   const handleGoogleSignIn = async () => {
     const provider = new GoogleAuthProvider();
@@ -343,8 +372,8 @@ export default function App() {
   };
 
   const handleGenerate = async () => {
-    const key = localStorage.getItem('geminiApiKey');
-    if (!key) { alert("Унесите API кључ у напредним подешавањима."); return; }
+    if (!geminiApiKey) { alert("Унесите API кључ у напредним подешавањима."); return; }
+    const key = geminiApiKey;
     
     setIsGenerating(true);
     try {
@@ -401,7 +430,11 @@ export default function App() {
   const quizData = useMemo(() => {
     if (!activeEpisode?.quiz) return [];
     return activeEpisode.quiz.map((q, idx) => {
-      const wordObjects = shuffleArray(q.options).map((word, wIdx) => ({ id: `q${idx}-w${wIdx}`, text: cleanText(word) }));
+      const stableWordObjects = q.options.map((word, wIdx) => ({ 
+        id: `q${idx}-w${wIdx}`, 
+        text: cleanText(word) 
+      }));
+      const wordObjects = shuffleArray(stableWordObjects);
       return { ...q, id: `q${idx}`, cleanTarget: cleanText(q.target), wordObjects };
     });
   }, [activeEpisode?.quiz]);
@@ -565,21 +598,40 @@ export default function App() {
                 <Settings size={18} /> Напредна / Техничка подешавања
               </button>
               {showAdvanced && (
-                <div className={`mt-6 p-6 rounded-2xl border flex flex-wrap gap-4 justify-center ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-stone-100 border-stone-200'}`}>
-                  <button onClick={() => { const key = prompt("Унесите API кључ:"); if(key) localStorage.setItem('geminiApiKey', key); }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold">
-                    Постави API кључ
-                  </button>
-                  <button onClick={handleExportPrompt} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
-                    <Download size={16}/> Извези промпт
-                  </button>
-                  <button onClick={async () => { try { const txt = await navigator.clipboard.readText(); processJSON(txt); } catch(e) { alert("Грешка при читању JSON-а"); } }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
-                    <ClipboardPaste size={16}/> Налепи JSON
-                  </button>
-                  {activeEpisodeId && (
-                    <button onClick={handleDeleteEpisode} className="px-4 py-2 bg-red-900/30 text-red-500 border border-red-900 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-red-900/50">
-                      <Trash2 size={16}/> Обриši лекцију
+                <div className={`mt-6 p-6 rounded-2xl border flex flex-col items-center gap-4 ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-stone-100 border-stone-200'}`}>
+                  <div className="text-sm font-bold flex items-center gap-2">
+                    <span>Статус API кључа:</span>
+                    {geminiApiKey ? (
+                      <span className="text-emerald-500 flex items-center gap-1"><Check size={16} /> Подешен (Firestore)</span>
+                    ) : (
+                      <span className="text-red-500">Није подешен</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-4 justify-center">
+                    <button onClick={async () => { 
+                      const key = prompt("Унесите API кључ:"); 
+                      if(key) {
+                        try {
+                          await setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid), { geminiApiKey: key }, { merge: true });
+                        } catch (err) {
+                          alert("Грешка при чувању кључа: " + err.message);
+                        }
+                      }
+                    }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold">
+                      Постави API кључ
                     </button>
-                  )}
+                    <button onClick={handleExportPrompt} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
+                      <Download size={16}/> Извези промпт
+                    </button>
+                    <button onClick={async () => { try { const txt = await navigator.clipboard.readText(); processJSON(txt); } catch(e) { alert("Грешка при читању JSON-а"); } }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
+                      <ClipboardPaste size={16}/> Налепи JSON
+                    </button>
+                    {activeEpisodeId && (
+                      <button onClick={handleDeleteEpisode} className="px-4 py-2 bg-red-900/30 text-red-500 border border-red-900 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-red-900/50">
+                        <Trash2 size={16}/> Обриши лекцију
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
