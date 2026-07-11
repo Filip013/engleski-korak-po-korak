@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, onSnapshot, collection, query, orderBy, limit, writeBatch, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { auth, db } from './firebase';
 import { useGeminiTTS } from './hooks/useGeminiTTS';
 import { useGeminiLiveAssistant } from './hooks/useGeminiLiveAssistant';
@@ -41,6 +44,40 @@ const JSON_SCHEMA = `{
 const cleanText = (str) => str.toLowerCase().replace(/[.,!?]/g, '');
 const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 
+function SortableWordTile({ id, wordText, onRemove }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: 'grab',
+    touchAction: 'none'
+  };
+
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={(e) => {
+        onRemove();
+      }}
+      className="px-4 py-2 rounded-lg text-lg font-medium border-b-4 bg-white dark:bg-zinc-800 border-stone-200 dark:border-zinc-950 shadow-sm hover:bg-stone-50 dark:hover:bg-zinc-750 active:cursor-grabbing shrink-0"
+    >
+      {wordText}
+    </button>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('studio');
@@ -62,6 +99,20 @@ export default function App() {
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('geminiApiKey') || '');
 
   const { isInstallable, installPWA } = usePWAInstall();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 8,
+      },
+    })
+  );
 
   // --- AI VOICE ASSISTANT SETUP ---
   const [helpContext, setHelpContext] = useState(null);
@@ -449,6 +500,15 @@ export default function App() {
     
     if (isCorrect) {
       handlePlayAudio(`quiz-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }]);
+    } else if (isAiActive) {
+      updateContext({
+        tip: 'quiz_incorrect_attempt',
+        ...q,
+        userCurrentAnswer: selectedText,
+        isIncorrect: true,
+        lastWrongAttempt: selectedText,
+        systemNotification: `Корисник је управо предао нетачан одговор на квизу: "${selectedText}". Тачан одговор је "${q.target}".`
+      });
     }
   };
 
@@ -793,6 +853,16 @@ export default function App() {
                 updateQuizState(q.id, selectedWordIds.filter(id => id !== wId));
               };
 
+              const handleDragEnd = (event) => {
+                const { active, over } = event;
+                if (!over || active.id === over.id) return;
+
+                const oldIndex = selectedWordIds.indexOf(active.id);
+                const newIndex = selectedWordIds.indexOf(over.id);
+                const newArray = arrayMove(selectedWordIds, oldIndex, newIndex);
+                updateQuizState(q.id, newArray);
+              };
+
               return (
                 <div key={q.id} className={`p-6 rounded-3xl border shadow-sm ${status === 'correct' ? (isDarkMode ? 'bg-emerald-900/20 border-emerald-500/50' : 'bg-emerald-50 border-emerald-200') : status === 'incorrect' ? (isDarkMode ? 'bg-red-900/20 border-red-500/50' : 'bg-red-50 border-red-200') : (isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200')}`}>
                   <div className="mb-6 flex items-center justify-between">
@@ -818,7 +888,10 @@ export default function App() {
                       onClick={() => openHelp({ 
                         tip: 'quiz', 
                         ...q, 
-                        userCurrentAnswer: currentAttemptText || "Ништа још није унето." 
+                        userCurrentAnswer: currentAttemptText || "Ништа још није унето.",
+                        status: status,
+                        isGraded: progress.quizGraded[q.id] || null,
+                        lastWrongAttempt: progress.quizAttempts?.[q.id] || null
                       })} 
                       className={`p-2 rounded-full transition-all hover:scale-110 ${isDarkMode ? 'text-blue-400 bg-blue-900/20 hover:bg-blue-900/40' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
                     >
@@ -830,13 +903,24 @@ export default function App() {
                        <p className="text-2xl font-medium text-emerald-700 dark:text-emerald-400">{q.target}</p>
                     </div>
                   ) : (
-                    <div className="min-h-[4rem] p-3 rounded-xl border-2 border-dashed flex flex-wrap content-start gap-2 mb-6 border-stone-300 dark:border-zinc-700">
-                      {selectedWordIds.length === 0 && <span className="m-auto text-sm opacity-50">Кликните на речи испод...</span>}
-                      {selectedWordIds.map(id => {
-                        const wObj = q.wordObjects.find(w => w.id === id);
-                        return wObj && <button key={id} onClick={() => deselectWord(id)} className="px-4 py-2 rounded-lg text-lg font-medium border-b-4 bg-white dark:bg-zinc-800 border-stone-200 dark:border-zinc-950">{wObj.text}</button>;
-                      })}
-                    </div>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                      <SortableContext items={selectedWordIds} strategy={horizontalListSortingStrategy}>
+                        <div className="min-h-[4rem] p-3 rounded-xl border-2 border-dashed flex flex-wrap content-start gap-2 mb-6 border-stone-300 dark:border-zinc-700">
+                          {selectedWordIds.length === 0 && <span className="m-auto text-sm opacity-50">Кликните на речи испод...</span>}
+                          {selectedWordIds.map(id => {
+                            const wObj = q.wordObjects.find(w => w.id === id);
+                            return wObj && (
+                              <SortableWordTile
+                                key={id}
+                                id={id}
+                                wordText={wObj.text}
+                                onRemove={() => deselectWord(id)}
+                              />
+                            );
+                          })}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
                   )}
 
                   {!status || status === 'incorrect' ? (
