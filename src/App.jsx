@@ -265,39 +265,60 @@ export default function App() {
   // --- SAFE STATE UPDATES ---
   const markDrillCompleted = async (dId) => {
     setDrillRevealed(prev => ({ ...prev, [dId]: true }));
-    setProgress(prev => {
-       const next = { ...prev, mastered: { ...prev.mastered, [dId]: true } };
-       setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), { mastered: next.mastered }, { merge: true });
-       return next;
-    });
+    
+    // Optimistic UI update
+    setProgress(prev => ({
+       ...prev,
+       mastered: { ...(prev.mastered || {}), [dId]: true }
+    }));
+
+    // Perform network request safely outside the state updater
+    if (user && activeEpisodeId) {
+      try {
+        await setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), { 
+          // Using dot notation/deep merge guarantees we only touch this specific drill 
+          // even if the closure's state is momentarily stale.
+          mastered: { [dId]: true } 
+        }, { merge: true });
+      } catch (err) {
+        console.error("Error saving drill progress:", err);
+      }
+    }
   };
 
   const updateQuizState = async (qId, selectedIds, isCorrect = null, attemptText = null) => {
-    setProgress(prev => {
-        const next = { 
-            ...prev, 
-            quizAnswers: { ...prev.quizAnswers, [qId]: selectedIds },
-            quizAttempts: prev.quizAttempts || {} 
-        };
-        if (isCorrect !== null) {
-            next.quizGraded = { ...prev.quizGraded, [qId]: isCorrect ? 'correct' : 'incorrect' };
-            if (!isCorrect && attemptText) {
-                next.quizAttempts = { ...next.quizAttempts, [qId]: attemptText };
-            }
-        } else if (prev.quizGraded?.[qId] === 'incorrect') {
-            const newGraded = { ...prev.quizGraded };
-            delete newGraded[qId];
-            next.quizGraded = newGraded;
+    // Calculate the next states outside the updater using the current component scope
+    const nextAnswers = { ...progress.quizAnswers, [qId]: selectedIds };
+    const nextAttempts = { ...(progress.quizAttempts || {}) };
+    const nextGraded = { ...progress.quizGraded };
+    
+    if (isCorrect !== null) {
+        nextGraded[qId] = isCorrect ? 'correct' : 'incorrect';
+        if (!isCorrect && attemptText) {
+            nextAttempts[qId] = attemptText;
         }
-        
-        setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), { 
-            quizAnswers: next.quizAnswers, 
-            quizGraded: next.quizGraded,
-            quizAttempts: next.quizAttempts
+    } else if (nextGraded[qId] === 'incorrect') {
+        delete nextGraded[qId];
+    }
+
+    setProgress(prev => ({
+        ...prev,
+        quizAnswers: nextAnswers,
+        quizGraded: nextGraded,
+        quizAttempts: nextAttempts
+    }));
+    
+    if (user && activeEpisodeId) {
+      try {
+        await setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), { 
+            quizAnswers: nextAnswers, 
+            quizGraded: nextGraded,
+            quizAttempts: nextAttempts
         }, { merge: true });
-        
-        return next;
-    });
+      } catch (err) {
+        console.error("Error saving quiz progress:", err);
+      }
+    }
   };
 
   const processJSON = async (rawText) => {
@@ -780,7 +801,7 @@ export default function App() {
               {activeEpisode.drills?.map((drill, idx) => {
                 const dId = `drill_${idx}`;
                 const isMastered = progress.mastered[dId];
-                const isRevealed = drillRevealed[dId];
+                const isRevealed = drillRevealed[dId] || isMastered;
                 const v = drill.gender === 'M' ? 'Puck' : 'Leda';
 
                 return (
