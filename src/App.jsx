@@ -234,6 +234,14 @@ export default function App() {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
   // Fetch Active Episode Data & Progress
   useEffect(() => {
     if (!user || !activeEpisodeId) { setActiveEpisode(null); return; }
@@ -541,12 +549,12 @@ export default function App() {
   // --- LOGIN SCREEN ---
   if (!user) {
     return (
-      <div className={`min-h-screen flex items-center justify-center transition-colors duration-500 p-4 ${isDarkMode ? 'bg-zinc-950 text-zinc-300' : 'bg-stone-50 text-stone-900'}`}>
+      <div className={`min-h-screen flex items-center justify-center transition-colors duration-500 p-4 ${isDarkMode ? 'dark bg-zinc-950 text-zinc-300' : 'bg-stone-50 text-stone-900'}`}>
         <div className={`max-w-md w-full p-8 rounded-3xl shadow-lg border text-center ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
           <div className="bg-blue-600 text-white p-4 rounded-2xl w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/20">
             <Compass size={32} />
           </div>
-          <h1 className="text-3xl font-bold mb-3 tracking-tight">Енглески за почетнике</h1>
+          <h1 className={`text-3xl font-bold mb-3 tracking-tight ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Енглески за почетнике</h1>
           <p className={`mb-8 ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>
             Пријавите се како бисте пратили свој напредак и сачували научене речи.
           </p>
@@ -562,7 +570,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen font-sans transition-colors duration-500 flex flex-col ${isDarkMode ? 'bg-zinc-950 text-zinc-300' : 'bg-stone-50 text-stone-900'}`}>
+    <div className={`min-h-screen font-sans transition-colors duration-500 flex flex-col ${isDarkMode ? 'dark bg-zinc-950 text-zinc-300' : 'bg-stone-50 text-stone-900'}`}>
       
       {/* 1. Top Navigation Bar */}
       <nav className={`py-4 px-6 border-b flex items-center justify-between sticky top-0 z-50 transition-colors duration-300 ${isDarkMode ? 'bg-zinc-900/90 border-zinc-800' : 'bg-white/90 border-stone-200 backdrop-blur-md'}`}>
@@ -626,7 +634,7 @@ export default function App() {
               className={`py-3 px-4 sm:px-6 text-sm sm:text-base font-semibold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === tab.id 
                   ? (isDarkMode ? 'border-blue-500 text-blue-400' : 'border-blue-600 text-blue-700') 
-                  : 'border-transparent text-stone-500 hover:text-stone-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                  : (isDarkMode ? 'border-transparent text-zinc-400 hover:text-zinc-200' : 'border-transparent text-stone-500 hover:text-stone-700')
               }`}
             >
               <tab.icon size={18} /> <span className="hidden sm:inline">{tab.label}</span>
@@ -639,13 +647,13 @@ export default function App() {
           <div className="space-y-8 animate-in fade-in">
 
             <div className={`p-8 rounded-3xl shadow-sm border text-center ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
-              <h2 className="text-3xl font-bold mb-4">Шта желите да учите данас?</h2>
+              <h2 className={`text-3xl font-bold mb-4 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Шта желите да учите данас?</h2>
               <p className={`mb-6 ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>Напишите тему или само кликните на дугме за насумичну лекцију.</p>
               
               <textarea 
                 value={topicInput} onChange={e => setTopicInput(e.target.value)} disabled={isGenerating}
                 placeholder="Генериши лекцију по свом избору..." 
-                className={`w-full max-w-xl mx-auto block p-4 rounded-2xl border-2 text-lg focus:outline-none focus:border-blue-500 min-h-[100px] mb-6 ${isDarkMode ? 'bg-zinc-950 border-zinc-700 text-zinc-100' : 'bg-stone-50 border-stone-200'}`} 
+                className={`w-full max-w-xl mx-auto block p-4 rounded-2xl border-2 text-lg focus:outline-none focus:border-blue-500 min-h-[100px] mb-6 ${isDarkMode ? 'bg-zinc-950 border-zinc-700 text-zinc-100 placeholder-zinc-500' : 'bg-stone-50 border-stone-200 placeholder-stone-400'}`} 
               />
               
               <button 
@@ -674,8 +682,8 @@ export default function App() {
             )}
 
             {/* Advanced Admin Tools */}
-            <div className="mt-12 pt-8 border-t border-dashed border-stone-300 dark:border-zinc-800">
-              <button onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-2 text-stone-400 hover:text-stone-600 font-bold mx-auto">
+            <div className={`mt-12 pt-8 border-t border-dashed ${isDarkMode ? 'border-zinc-800' : 'border-stone-300'}`}>
+              <button onClick={() => setShowAdvanced(!showAdvanced)} className={`flex items-center gap-2 font-bold mx-auto transition-colors ${isDarkMode ? 'text-zinc-400 hover:text-zinc-200' : 'text-stone-400 hover:text-stone-600'}`}>
                 <Settings size={18} /> Напредна / Техничка подешавања
               </button>
               {showAdvanced && (
@@ -698,17 +706,17 @@ export default function App() {
                           alert("Грешка при чувању кључа: " + err.message);
                         }
                       }
-                    }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold">
+                    }} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${isDarkMode ? 'bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700' : 'bg-stone-800 text-white hover:bg-stone-700'}`}>
                       Постави API кључ
                     </button>
-                    <button onClick={handleExportPrompt} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
+                    <button onClick={handleExportPrompt} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${isDarkMode ? 'bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700' : 'bg-stone-800 text-white hover:bg-stone-700'}`}>
                       <Download size={16}/> Извези промпт
                     </button>
-                    <button onClick={async () => { try { const txt = await navigator.clipboard.readText(); processJSON(txt); } catch(e) { alert("Грешка при читању JSON-а"); } }} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-sm font-bold flex items-center gap-2">
+                    <button onClick={async () => { try { const txt = await navigator.clipboard.readText(); processJSON(txt); } catch(e) { alert("Грешка при читању JSON-а"); } }} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${isDarkMode ? 'bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700' : 'bg-stone-800 text-white hover:bg-stone-700'}`}>
                       <ClipboardPaste size={16}/> Налепи JSON
                     </button>
                     {activeEpisodeId && (
-                      <button onClick={handleDeleteEpisode} className="px-4 py-2 bg-red-900/30 text-red-500 border border-red-900 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-red-900/50">
+                      <button onClick={handleDeleteEpisode} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${isDarkMode ? 'bg-red-950/40 text-red-400 border border-red-800/60 hover:bg-red-900/50' : 'bg-red-900/30 text-red-500 border border-red-900 hover:bg-red-900/50'}`}>
                         <Trash2 size={16}/> Обриши лекцију
                       </button>
                     )}
@@ -723,14 +731,14 @@ export default function App() {
         {activeTab === 'reading' && activeEpisode && (
           <div className="space-y-8 animate-in fade-in">
              <header className="mb-8">
-                <h2 className="text-3xl font-bold mb-2">{activeEpisode.title}</h2>
+                <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{activeEpisode.title}</h2>
                 <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>{activeEpisode.tutorIntroduction}</p>
              </header>
 
              {/* Dialog */}
              <section className={`p-6 md:p-8 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
-                <div className="flex items-center justify-between mb-8 border-b pb-4 dark:border-zinc-800">
-                  <h2 className="text-2xl font-bold flex items-center gap-2"><MessageCircle className="text-blue-600"/> Дијалог</h2>
+                <div className={`flex items-center justify-between mb-8 border-b pb-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
+                  <h2 className="text-2xl font-bold flex items-center gap-2"><MessageCircle className="text-blue-600 dark:text-blue-400"/> Дијалог</h2>
                   <div className="flex gap-2">
                     <button 
                       onClick={() => openHelp({ tip: 'full_dialog', dialog: activeEpisode.dialog })} 
@@ -741,7 +749,7 @@ export default function App() {
                     </button>
                     <button 
                       onClick={() => handlePlayAudio('dialog-full', activeEpisode.dialog.map(l => ({ text: l.en, voice: l.gender === 'M' ? 'Puck' : 'Leda' })))} 
-                      className={`p-3 rounded-full ${playingId === 'dialog-full' ? 'bg-blue-100 text-blue-600' : 'bg-stone-100 text-stone-600 hover:bg-stone-200 dark:bg-zinc-800 dark:text-zinc-300'}`}
+                      className={`p-3 rounded-full transition-colors ${playingId === 'dialog-full' ? (isDarkMode ? 'bg-blue-950 text-blue-400 border border-blue-800' : 'bg-blue-100 text-blue-600') : (isDarkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-stone-100 text-stone-600 hover:bg-stone-200')}`}
                     >
                       {playingId === 'dialog-full' ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
                     </button>
@@ -752,10 +760,14 @@ export default function App() {
                     const isRight = idx % 2 !== 0;
                     return (
                       <div key={idx} className={`flex flex-col ${isRight ? 'items-end' : 'items-start'}`}>
-                        <div className="text-xs font-bold mb-1 opacity-50 px-2">{line.speaker}</div>
-                        <div className={`max-w-[85%] p-4 rounded-2xl ${isRight ? 'bg-blue-100 text-blue-900 rounded-tr-sm' : (isDarkMode ? 'bg-zinc-800 text-zinc-100 rounded-tl-sm' : 'bg-stone-100 text-stone-800 rounded-tl-sm')}`}>
+                        <div className={`text-xs font-bold mb-1 opacity-60 px-2 ${isDarkMode ? 'text-zinc-400' : 'text-stone-600'}`}>{line.speaker}</div>
+                        <div className={`max-w-[85%] p-4 rounded-2xl ${
+                          isRight 
+                            ? (isDarkMode ? 'bg-blue-950/80 text-blue-100 border border-blue-800/50 rounded-tr-sm' : 'bg-blue-100 text-blue-900 rounded-tr-sm') 
+                            : (isDarkMode ? 'bg-zinc-800 text-zinc-100 border border-zinc-700/50 rounded-tl-sm' : 'bg-stone-100 text-stone-800 rounded-tl-sm')
+                        }`}>
                           <p className="text-xl font-medium mb-1">{line.en}</p>
-                          <p className="text-sm italic opacity-70">{line.sr}</p>
+                          <p className={`text-sm italic ${isRight ? (isDarkMode ? 'text-blue-300/80' : 'opacity-70') : (isDarkMode ? 'text-zinc-400' : 'opacity-70')}`}>{line.sr}</p>
                         </div>
                       </div>
                     )
@@ -765,7 +777,7 @@ export default function App() {
 
              {/* Grammar */}
              <section className={`p-6 md:p-8 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
-                <div className="flex items-center justify-between mb-6 border-b pb-4 dark:border-zinc-800">
+                <div className={`flex items-center justify-between mb-6 border-b pb-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
                   <h2 className="text-2xl font-bold flex items-center gap-2"><Lightbulb className="text-amber-500"/> Објашњења</h2>
                   <button 
                     onClick={() => openHelp({ tip: 'full_grammar', grammar: activeEpisode.grammar })} 
@@ -778,8 +790,8 @@ export default function App() {
                 <div className="space-y-6">
                   {activeEpisode.grammar?.map((item, idx) => (
                     <div key={idx}>
-                      <span className="font-bold block text-lg text-blue-600 dark:text-blue-400 mb-1">{item.title}</span> 
-                      <p className="text-lg">{item.explanation}</p>
+                      <span className={`font-bold block text-lg mb-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>{item.title}</span> 
+                      <p className={`text-lg ${isDarkMode ? 'text-zinc-200' : 'text-stone-800'}`}>{item.explanation}</p>
                     </div>
                   ))}
                 </div>
@@ -791,7 +803,7 @@ export default function App() {
         {activeTab === 'drills' && activeEpisode && (
           <div className="space-y-6 animate-in fade-in">
             <header className="mb-6">
-              <h2 className="text-3xl font-bold mb-2">Вежбе</h2>
+              <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Вежбе</h2>
                 <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>
                   Слушајте и понављајте. (Енглески {'->'} Српски {'->'} Енглески)
                 </p>
@@ -807,18 +819,29 @@ export default function App() {
                 return (
                   <div key={dId} className={`rounded-2xl p-5 border flex items-center justify-between gap-4 transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
                     <div className="flex items-start gap-4 flex-1">
-                      <div className={`mt-1 flex items-center justify-center w-6 h-6 rounded-full border shrink-0 ${isMastered ? 'bg-blue-100 border-blue-500 text-blue-600' : (isDarkMode ? 'border-zinc-700' : 'border-stone-300')}`}>
+                      <div className={`mt-1 flex items-center justify-center w-6 h-6 rounded-full border shrink-0 ${
+                        isMastered 
+                          ? (isDarkMode ? 'bg-blue-950 border-blue-500 text-blue-400' : 'bg-blue-100 border-blue-500 text-blue-600') 
+                          : (isDarkMode ? 'border-zinc-700 text-transparent' : 'border-stone-300 text-transparent')
+                      }`}>
                         <Check size={14} strokeWidth={isMastered ? 3 : 2} />
                       </div>
                       <div className="flex-1">
                         {!isRevealed ? (
-                          <button onClick={() => setDrillRevealed(prev => ({...prev, [dId]: true}))} className="px-4 py-2 rounded-xl text-sm font-bold bg-blue-50 text-blue-600 flex items-center gap-2">
+                          <button 
+                            onClick={() => setDrillRevealed(prev => ({...prev, [dId]: true}))} 
+                            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors ${
+                              isDarkMode 
+                                ? 'bg-blue-950/60 text-blue-400 border border-blue-800/50 hover:bg-blue-900/60' 
+                                : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                            }`}
+                          >
                             <Eye size={16} /> Прикажи текст
                           </button>
                         ) : (
                           <div>
-                            <p className="font-medium text-xl mb-1">{drill.en}</p>
-                            <p className="italic text-sm opacity-60">{drill.sr}</p>
+                            <p className={`font-medium text-xl mb-1 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{drill.en}</p>
+                            <p className={`italic text-sm ${isDarkMode ? 'text-zinc-400' : 'opacity-60'}`}>{drill.sr}</p>
                           </div>
                         )}
                       </div>
@@ -834,7 +857,11 @@ export default function App() {
                       </button>
                       <button 
                         onClick={() => handlePlayAudio(dId, [{ text: drill.en, voice: v }, { text: drill.sr, voice: v }, { text: drill.en, voice: v }], () => markDrillCompleted(dId))}
-                        className={`p-4 rounded-full border ${playingId === dId ? 'bg-blue-100 text-blue-600 border-blue-200' : (isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-stone-50 text-stone-600 hover:bg-stone-100')}`}
+                        className={`p-4 rounded-full border transition-all ${
+                          playingId === dId 
+                            ? (isDarkMode ? 'bg-blue-950 text-blue-400 border-blue-800' : 'bg-blue-100 text-blue-600 border-blue-200') 
+                            : (isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700' : 'bg-stone-50 text-stone-600 hover:bg-stone-100')
+                        }`}
                       >
                         {playingId === dId ? <Pause size={20} /> : <Volume2 size={20} />}
                       </button>
@@ -850,7 +877,7 @@ export default function App() {
         {activeTab === 'quiz' && activeEpisode && (
           <div className="space-y-10 animate-in fade-in">
             <header className="mb-6">
-              <h2 className="text-3xl font-bold mb-2">Квиз</h2>
+              <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Квиз</h2>
               <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>Сложите речи у реченицу.</p>
             </header>
 
@@ -885,19 +912,19 @@ export default function App() {
               };
 
               return (
-                <div key={q.id} className={`p-6 rounded-3xl border shadow-sm ${status === 'correct' ? (isDarkMode ? 'bg-emerald-900/20 border-emerald-500/50' : 'bg-emerald-50 border-emerald-200') : status === 'incorrect' ? (isDarkMode ? 'bg-red-900/20 border-red-500/50' : 'bg-red-50 border-red-200') : (isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200')}`}>
+                <div key={q.id} className={`p-6 rounded-3xl border shadow-sm ${status === 'correct' ? (isDarkMode ? 'bg-emerald-950/20 border-emerald-500/50' : 'bg-emerald-50 border-emerald-200') : status === 'incorrect' ? (isDarkMode ? 'bg-red-950/20 border-red-500/50' : 'bg-red-50 border-red-200') : (isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200')}`}>
                   <div className="mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <span className="text-xl opacity-40 font-medium">{idx + 1}.</span>
+                      <span className={`text-xl font-medium ${isDarkMode ? 'text-zinc-500' : 'opacity-40'}`}>{idx + 1}.</span>
                       {(!q.type || q.type === 'translation') ? (
-                        <span className="text-xl font-medium">{q.prompt}</span>
+                        <span className={`text-xl font-medium ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{q.prompt}</span>
                       ) : (
                         <button 
                           onClick={() => handlePlayAudio(`quiz-listen-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }])}
                           className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all active:scale-95 ${
                             playingId === `quiz-listen-${q.id}` 
                               ? 'bg-blue-600 text-white' 
-                              : (isDarkMode ? 'bg-blue-900/30 text-blue-400 hover:bg-blue-900/50' : 'bg-blue-100 text-blue-700 hover:bg-blue-200')
+                              : (isDarkMode ? 'bg-blue-950/50 text-blue-400 border border-blue-800/60 hover:bg-blue-900/60' : 'bg-blue-100 text-blue-700 hover:bg-blue-200')
                           }`}
                         >
                           {playingId === `quiz-listen-${q.id}` ? <Pause size={20} /> : <Volume2 size={20} />}
@@ -914,20 +941,20 @@ export default function App() {
                         isGraded: progress.quizGraded[q.id] || null,
                         lastWrongAttempt: progress.quizAttempts?.[q.id] || null
                       })} 
-                      className={`p-2 rounded-full transition-all hover:scale-110 ${isDarkMode ? 'text-blue-400 bg-blue-900/20 hover:bg-blue-900/40' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                      className={`p-2 rounded-full transition-all hover:scale-110 ${isDarkMode ? 'text-blue-400 bg-blue-950/40 hover:bg-blue-900/50' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
                     >
                       <HelpCircle size={20} />
                     </button>
                   </div>
                   {status === 'correct' ? (
-                    <div className="p-4 rounded-xl bg-emerald-100/50 border border-emerald-300 mb-6">
+                    <div className={`p-4 rounded-xl border mb-6 ${isDarkMode ? 'bg-emerald-950/60 border-emerald-800/80' : 'bg-emerald-100/50 border-emerald-300'}`}>
                        <p className="text-2xl font-medium text-emerald-700 dark:text-emerald-400">{q.target}</p>
                     </div>
                   ) : (
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                       <SortableContext items={selectedWordIds} strategy={horizontalListSortingStrategy}>
-                        <div className="min-h-[4rem] p-3 rounded-xl border-2 border-dashed flex flex-wrap content-start gap-2 mb-6 border-stone-300 dark:border-zinc-700">
-                          {selectedWordIds.length === 0 && <span className="m-auto text-sm opacity-50">Кликните на речи испод...</span>}
+                        <div className={`min-h-[4rem] p-3 rounded-xl border-2 border-dashed flex flex-wrap content-start gap-2 mb-6 ${isDarkMode ? 'border-zinc-700 bg-zinc-950/50' : 'border-stone-300 bg-stone-50/50'}`}>
+                          {selectedWordIds.length === 0 && <span className={`m-auto text-sm ${isDarkMode ? 'text-zinc-500' : 'opacity-50'}`}>Кликните на речи испод...</span>}
                           {selectedWordIds.map(id => {
                             const wObj = q.wordObjects.find(w => w.id === id);
                             return wObj && (
@@ -947,19 +974,38 @@ export default function App() {
                   {!status || status === 'incorrect' ? (
                     <div className="flex flex-wrap gap-2 mb-6 min-h-[3rem]">
                       {availableWords.map(wObj => (
-                        <button key={wObj.id} onClick={() => selectWord(wObj.id)} className="px-4 py-2 rounded-lg text-lg font-medium border-b-4 bg-white dark:bg-zinc-800 border-stone-300 dark:border-zinc-950 shadow-sm active:scale-95">{wObj.text}</button>
+                        <button 
+                          key={wObj.id} 
+                          onClick={() => selectWord(wObj.id)} 
+                          className={`px-4 py-2 rounded-lg text-lg font-medium border-b-4 shadow-sm active:scale-95 transition-all ${
+                            isDarkMode 
+                              ? 'bg-zinc-800 text-zinc-100 border-zinc-950 hover:bg-zinc-750' 
+                              : 'bg-white text-stone-900 border-stone-300'
+                          }`}
+                        >
+                          {wObj.text}
+                        </button>
                       ))}
                     </div>
                   ) : (
-                    <div className="min-h-[3rem] mb-6 flex items-center text-emerald-600 font-bold text-lg"><CheckCircle className="mr-2"/> Одлично!</div>
+                    <div className="min-h-[3rem] mb-6 flex items-center text-emerald-600 dark:text-emerald-400 font-bold text-lg"><CheckCircle className="mr-2"/> Одлично!</div>
                   )}
 
-                  <div className="flex justify-end border-t pt-4 dark:border-zinc-800">
-                    {status === 'incorrect' && <p className="mr-auto my-auto font-bold text-red-500">Није тачно. Покушајте поново.</p>}
+                  <div className={`flex justify-end border-t pt-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
+                    {status === 'incorrect' && <p className="mr-auto my-auto font-bold text-red-500 dark:text-red-400">Није тачно. Покушајте поново.</p>}
                     {status !== 'correct' ? (
-                      <button onClick={() => handleQuizCheck(q)} disabled={selectedWordIds.length === 0} className="px-6 py-3 rounded-xl font-bold bg-blue-600 text-white disabled:opacity-50">Провери</button>
+                      <button onClick={() => handleQuizCheck(q)} disabled={selectedWordIds.length === 0} className="px-6 py-3 rounded-xl font-bold bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-500 transition-all active:scale-95">Провери</button>
                     ) : (
-                      <button onClick={() => handlePlayAudio(`quiz-rev-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }])} className="px-6 py-3 rounded-xl font-bold bg-emerald-100 text-emerald-700 flex items-center gap-2"><Volume2 size={20}/> Слушај поново</button>
+                      <button 
+                        onClick={() => handlePlayAudio(`quiz-rev-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }])} 
+                        className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all ${
+                          isDarkMode 
+                            ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800 hover:bg-emerald-900/80' 
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        <Volume2 size={20}/> Слушај поново
+                      </button>
                     )}
                   </div>
                 </div>
@@ -973,12 +1019,22 @@ export default function App() {
           <div className="space-y-6 animate-in fade-in">
             <header className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
-                <h2 className="text-3xl font-bold mb-2">Речник</h2>
+                <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Речник</h2>
                 <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>{dictionary.length} научених речи.</p>
               </div>
               <div className="relative w-full md:max-w-xs">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-                <input type="text" placeholder="Претражи..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 rounded-xl border-2 focus:outline-none dark:bg-zinc-900 dark:border-zinc-700" />
+                <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${isDarkMode ? 'text-zinc-500' : 'text-stone-400'}`} size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Претражи..." 
+                  value={searchTerm} 
+                  onChange={e => setSearchTerm(e.target.value)} 
+                  className={`w-full pl-11 pr-4 py-3 rounded-xl border-2 focus:outline-none focus:border-blue-500 transition-all ${
+                    isDarkMode 
+                      ? 'bg-zinc-900 border-zinc-700 text-zinc-100 placeholder-zinc-500' 
+                      : 'bg-white border-stone-200 text-stone-900 placeholder-stone-400'
+                  }`} 
+                />
               </div>
             </header>
 
@@ -988,16 +1044,31 @@ export default function App() {
                   <div>
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => handlePlayAudio(`dict-${idx}`, [{ text: item.english, voice: 'Leda' }])} className="p-1.5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100"><Volume2 size={16}/></button>
-                        <h3 className="text-xl font-medium">{item.english}</h3>
+                        <button 
+                          onClick={() => handlePlayAudio(`dict-${idx}`, [{ text: item.english, voice: 'Leda' }])} 
+                          className={`p-1.5 rounded-full transition-colors ${
+                            isDarkMode ? 'bg-zinc-800 text-blue-400 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                          }`}
+                        >
+                          <Volume2 size={16}/>
+                        </button>
+                        <h3 className={`text-xl font-medium ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{item.english}</h3>
                       </div>
-                      {item.pos && <span className="text-[9px] uppercase font-bold px-2 py-1 rounded border bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300">{item.pos}</span>}
+                      {item.pos && (
+                        <span className={`text-[9px] uppercase font-bold px-2 py-1 rounded border ${
+                          isDarkMode 
+                            ? 'bg-blue-950/60 border-blue-800/80 text-blue-300' 
+                            : 'bg-blue-50 border-blue-200 text-blue-600'
+                        }`}>
+                          {item.pos}
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs font-mono italic mb-4 ml-8 text-blue-600/70">/{item.pronunciation}/</p>
+                    <p className={`text-xs font-mono italic mb-4 ml-8 ${isDarkMode ? 'text-blue-400/80' : 'text-blue-600/70'}`}>/{item.pronunciation}/</p>
                   </div>
-                  <div className="pt-3 border-t border-stone-100 dark:border-zinc-800 flex items-start gap-2">
-                    <Tag className="w-3.5 h-3.5 mt-0.5 text-stone-400" />
-                    <p className="text-sm font-medium">{item.serbian}</p>
+                  <div className={`pt-3 border-t flex items-start gap-2 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
+                    <Tag className={`w-3.5 h-3.5 mt-0.5 ${isDarkMode ? 'text-zinc-500' : 'text-stone-400'}`} />
+                    <p className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-stone-700'}`}>{item.serbian}</p>
                   </div>
                 </div>
               ))}
