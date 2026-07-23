@@ -88,6 +88,9 @@ export default function App() {
   const [activeEpisodeId, setActiveEpisodeId] = useState(null);
   const [activeEpisode, setActiveEpisode] = useState(null);
   
+  const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(true);
+  const [isLoadingActiveEpisode, setIsLoadingActiveEpisode] = useState(false);
+
   const [progress, setProgress] = useState({ mastered: {}, quizAnswers: {}, quizGraded: {} });
   const [dictionary, setDictionary] = useState([]);
   
@@ -163,13 +166,13 @@ export default function App() {
           setGeminiApiKey(data.geminiApiKey);
           localStorage.setItem('geminiApiKey', data.geminiApiKey);
         } else if (localKey) {
-          // Upload local key to Firestore if Firestore doesn't have it yet
           await setDoc(userDocRef, { geminiApiKey: localKey }, { merge: true });
         }
       } else if (localKey) {
-        // Create user document with local key if it doesn't exist
         await setDoc(userDocRef, { geminiApiKey: localKey }, { merge: true });
       }
+    }, (err) => {
+      console.error("User doc snapshot error:", err);
     });
 
     return () => unsub();
@@ -197,9 +200,11 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setEpisodesList([]);
+      setIsLoadingEpisodes(false);
       return;
     }
     
+    setIsLoadingEpisodes(true);
     const epQuery = query(
       collection(db, 'artifacts', APP_ID, 'users', user.uid, 'episodes'),
       orderBy('timestamp', 'desc')
@@ -213,6 +218,7 @@ export default function App() {
       }));
       
       setEpisodesList(eps);
+      setIsLoadingEpisodes(false);
       
       // If no episode is currently selected, auto-select the most recent one
       setActiveEpisodeId(prevId => {
@@ -221,6 +227,9 @@ export default function App() {
         }
         return prevId;
       });
+    }, (err) => {
+      console.error("Error fetching episodes:", err);
+      setIsLoadingEpisodes(false);
     });
 
     return () => unsub();
@@ -244,19 +253,29 @@ export default function App() {
 
   // Fetch Active Episode Data & Progress
   useEffect(() => {
-    if (!user || !activeEpisodeId) { setActiveEpisode(null); return; }
+    if (!user || !activeEpisodeId) { 
+      setActiveEpisode(null); 
+      setIsLoadingActiveEpisode(false);
+      return; 
+    }
     
-    // Reset revealed drills ONLY when the active episode changes, 
-    // not every time the database updates!
+    setIsLoadingActiveEpisode(true);
     setDrillRevealed({}); 
     
     const unsubEp = onSnapshot(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'episodes', activeEpisodeId), (snap) => {
       if (snap.exists()) setActiveEpisode({ id: snap.id, ...snap.data() });
+      else setActiveEpisode(null);
+      setIsLoadingActiveEpisode(false);
+    }, (err) => {
+      console.error("Error fetching active episode:", err);
+      setIsLoadingActiveEpisode(false);
     });
     
     const unsubProg = onSnapshot(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'progress', activeEpisodeId), (snap) => {
       if (snap.exists()) setProgress({ mastered: {}, quizAnswers: {}, quizGraded: {}, quizAttempts: {}, ...snap.data() });
       else setProgress({ mastered: {}, quizAnswers: {}, quizGraded: {}, quizAttempts: {} });
+    }, (err) => {
+      console.error("Error fetching progress:", err);
     });
 
     return () => { unsubEp(); unsubProg(); };
@@ -267,6 +286,8 @@ export default function App() {
     if (!user) return;
     return onSnapshot(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'database', 'dictionary'), (snap) => {
       if (snap.exists()) setDictionary(snap.data().entries || []);
+    }, (err) => {
+      console.error("Error fetching dictionary:", err);
     });
   }, [user]);
 
@@ -665,9 +686,13 @@ export default function App() {
             </div>
 
             {/* Past Episodes Selector */}
-            {episodesList.length > 0 && (
-              <div className="mt-8">
-                <h3 className={`text-sm font-bold uppercase tracking-widest mb-4 ${isDarkMode ? 'text-zinc-500' : 'text-stone-400'}`}>Претходне Лекције</h3>
+            <div className="mt-8">
+              <h3 className={`text-sm font-bold uppercase tracking-widest mb-4 ${isDarkMode ? 'text-zinc-500' : 'text-stone-400'}`}>Претходне Лекције</h3>
+              {isLoadingEpisodes ? (
+                <div className="p-6 text-center text-stone-400 dark:text-zinc-500 flex items-center justify-center gap-2">
+                  <Loader2 className="animate-spin text-blue-600 dark:text-blue-400" size={20} /> Учитавање лекција...
+                </div>
+              ) : episodesList.length > 0 ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {episodesList.map(ep => (
                     <button 
@@ -678,8 +703,10 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className={`text-sm italic ${isDarkMode ? 'text-zinc-500' : 'text-stone-400'}`}>Још увек немате сачуваних лекција.</p>
+              )}
+            </div>
 
             {/* Advanced Admin Tools */}
             <div className={`mt-12 pt-8 border-t border-dashed ${isDarkMode ? 'border-zinc-800' : 'border-stone-300'}`}>
@@ -728,290 +755,338 @@ export default function App() {
         )}
 
         {/* 2. READING TAB */}
-        {activeTab === 'reading' && activeEpisode && (
-          <div className="space-y-8 animate-in fade-in">
-             <header className="mb-8">
-                <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{activeEpisode.title}</h2>
-                <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>{activeEpisode.tutorIntroduction}</p>
-             </header>
+        {activeTab === 'reading' && (
+          isLoadingActiveEpisode ? (
+            <div className="py-16 text-center text-stone-500 dark:text-zinc-400">
+              <Loader2 className="animate-spin mx-auto mb-4 text-blue-600 dark:text-blue-400" size={36} />
+              <p className="text-lg font-medium">Учитавање лекције...</p>
+            </div>
+          ) : activeEpisode ? (
+            <div className="space-y-8 animate-in fade-in">
+               <header className="mb-8">
+                  <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{activeEpisode.title}</h2>
+                  <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>{activeEpisode.tutorIntroduction}</p>
+               </header>
 
-             {/* Dialog */}
-             <section className={`p-6 md:p-8 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
-                <div className={`flex items-center justify-between mb-8 border-b pb-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
-                  <h2 className="text-2xl font-bold flex items-center gap-2"><MessageCircle className="text-blue-600 dark:text-blue-400"/> Дијалог</h2>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => openHelp({ tip: 'full_dialog', dialog: activeEpisode.dialog })} 
-                      className={`p-3 rounded-full transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
-                      title="Питај АИ о овом дијалогу"
-                    >
-                      <HelpCircle size={20} />
-                    </button>
-                    <button 
-                      onClick={() => handlePlayAudio('dialog-full', activeEpisode.dialog.map(l => ({ text: l.en, voice: l.gender === 'M' ? 'Puck' : 'Leda' })))} 
-                      className={`p-3 rounded-full transition-colors ${playingId === 'dialog-full' ? (isDarkMode ? 'bg-blue-950 text-blue-400 border border-blue-800' : 'bg-blue-100 text-blue-600') : (isDarkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-stone-100 text-stone-600 hover:bg-stone-200')}`}
-                    >
-                      {playingId === 'dialog-full' ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-6">
-                  {activeEpisode.dialog?.map((line, idx) => {
-                    const isRight = idx % 2 !== 0;
-                    return (
-                      <div key={idx} className={`flex flex-col ${isRight ? 'items-end' : 'items-start'}`}>
-                        <div className={`text-xs font-bold mb-1 opacity-60 px-2 ${isDarkMode ? 'text-zinc-400' : 'text-stone-600'}`}>{line.speaker}</div>
-                        <div className={`max-w-[85%] p-4 rounded-2xl ${
-                          isRight 
-                            ? (isDarkMode ? 'bg-blue-950/80 text-blue-100 border border-blue-800/50 rounded-tr-sm' : 'bg-blue-100 text-blue-900 rounded-tr-sm') 
-                            : (isDarkMode ? 'bg-zinc-800 text-zinc-100 border border-zinc-700/50 rounded-tl-sm' : 'bg-stone-100 text-stone-800 rounded-tl-sm')
-                        }`}>
-                          <p className="text-xl font-medium mb-1">{line.en}</p>
-                          <p className={`text-sm italic ${isRight ? (isDarkMode ? 'text-blue-300/80' : 'opacity-70') : (isDarkMode ? 'text-zinc-400' : 'opacity-70')}`}>{line.sr}</p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-             </section>
-
-             {/* Grammar */}
-             <section className={`p-6 md:p-8 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
-                <div className={`flex items-center justify-between mb-6 border-b pb-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
-                  <h2 className="text-2xl font-bold flex items-center gap-2"><Lightbulb className="text-amber-500"/> Објашњења</h2>
-                  <button 
-                    onClick={() => openHelp({ tip: 'full_grammar', grammar: activeEpisode.grammar })} 
-                    className={`p-3 rounded-full transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
-                    title="Питај АИ о граматици"
-                  >
-                    <HelpCircle size={20} />
-                  </button>
-                </div>
-                <div className="space-y-6">
-                  {activeEpisode.grammar?.map((item, idx) => (
-                    <div key={idx}>
-                      <span className={`font-bold block text-lg mb-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>{item.title}</span> 
-                      <p className={`text-lg ${isDarkMode ? 'text-zinc-200' : 'text-stone-800'}`}>{item.explanation}</p>
-                    </div>
-                  ))}
-                </div>
-             </section>
-          </div>
-        )}
-
-        {/* 3. DRILLS TAB */}
-        {activeTab === 'drills' && activeEpisode && (
-          <div className="space-y-6 animate-in fade-in">
-            <header className="mb-6">
-              <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Вежбе</h2>
-                <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>
-                  Слушајте и понављајте. (Енглески {'->'} Српски {'->'} Енглески)
-                </p>
-            </header>
-            
-            <div className="space-y-4">
-              {activeEpisode.drills?.map((drill, idx) => {
-                const dId = `drill_${idx}`;
-                const isMastered = progress.mastered[dId];
-                const isRevealed = drillRevealed[dId] || isMastered;
-                const v = drill.gender === 'M' ? 'Puck' : 'Leda';
-
-                return (
-                  <div key={dId} className={`rounded-2xl p-5 border flex items-center justify-between gap-4 transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
-                    <div className="flex items-start gap-4 flex-1">
-                      <div className={`mt-1 flex items-center justify-center w-6 h-6 rounded-full border shrink-0 ${
-                        isMastered 
-                          ? (isDarkMode ? 'bg-blue-950 border-blue-500 text-blue-400' : 'bg-blue-100 border-blue-500 text-blue-600') 
-                          : (isDarkMode ? 'border-zinc-700 text-transparent' : 'border-stone-300 text-transparent')
-                      }`}>
-                        <Check size={14} strokeWidth={isMastered ? 3 : 2} />
-                      </div>
-                      <div className="flex-1">
-                        {!isRevealed ? (
-                          <button 
-                            onClick={() => setDrillRevealed(prev => ({...prev, [dId]: true}))} 
-                            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors ${
-                              isDarkMode 
-                                ? 'bg-blue-950/60 text-blue-400 border border-blue-800/50 hover:bg-blue-900/60' 
-                                : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                            }`}
-                          >
-                            <Eye size={16} /> Прикажи текст
-                          </button>
-                        ) : (
-                          <div>
-                            <p className={`font-medium text-xl mb-1 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{drill.en}</p>
-                            <p className={`italic text-sm ${isDarkMode ? 'text-zinc-400' : 'opacity-60'}`}>{drill.sr}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Play and Help Buttons Wrapper */}
-                    <div className="flex gap-2 shrink-0">
+               {/* Dialog */}
+               <section className={`p-6 md:p-8 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                  <div className={`flex items-center justify-between mb-8 border-b pb-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
+                    <h2 className="text-2xl font-bold flex items-center gap-2"><MessageCircle className="text-blue-600 dark:text-blue-400"/> Дијалог</h2>
+                    <div className="flex gap-2">
                       <button 
-                        onClick={() => openHelp({ tip: 'drill', ...drill })}
-                        className={`p-4 rounded-full border transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 border-zinc-700 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}
+                        onClick={() => openHelp({ tip: 'full_dialog', dialog: activeEpisode.dialog })} 
+                        className={`p-3 rounded-full transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                        title="Питај АИ о овом дијалогу"
                       >
                         <HelpCircle size={20} />
                       </button>
                       <button 
-                        onClick={() => handlePlayAudio(dId, [{ text: drill.en, voice: v }, { text: drill.sr, voice: v }, { text: drill.en, voice: v }], () => markDrillCompleted(dId))}
-                        className={`p-4 rounded-full border transition-all ${
-                          playingId === dId 
-                            ? (isDarkMode ? 'bg-blue-950 text-blue-400 border-blue-800' : 'bg-blue-100 text-blue-600 border-blue-200') 
-                            : (isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700' : 'bg-stone-50 text-stone-600 hover:bg-stone-100')
-                        }`}
+                        onClick={() => handlePlayAudio('dialog-full', activeEpisode.dialog.map(l => ({ text: l.en, voice: l.gender === 'M' ? 'Puck' : 'Leda' })))} 
+                        className={`p-3 rounded-full transition-colors ${playingId === 'dialog-full' ? (isDarkMode ? 'bg-blue-950 text-blue-400 border border-blue-800' : 'bg-blue-100 text-blue-600') : (isDarkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-stone-100 text-stone-600 hover:bg-stone-200')}`}
                       >
-                        {playingId === dId ? <Pause size={20} /> : <Volume2 size={20} />}
+                        {playingId === 'dialog-full' ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
                       </button>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
+                    {activeEpisode.dialog?.map((line, idx) => {
+                      const isRight = idx % 2 !== 0;
+                      return (
+                        <div key={idx} className={`flex flex-col ${isRight ? 'items-end' : 'items-start'}`}>
+                          <div className={`text-xs font-bold mb-1 opacity-60 px-2 ${isDarkMode ? 'text-zinc-400' : 'text-stone-600'}`}>{line.speaker}</div>
+                          <div className={`max-w-[85%] p-4 rounded-2xl ${
+                            isRight 
+                              ? (isDarkMode ? 'bg-blue-950/80 text-blue-100 border border-blue-800/50 rounded-tr-sm' : 'bg-blue-100 text-blue-900 rounded-tr-sm') 
+                              : (isDarkMode ? 'bg-zinc-800 text-zinc-100 border border-zinc-700/50 rounded-tl-sm' : 'bg-stone-100 text-stone-800 rounded-tl-sm')
+                          }`}>
+                            <p className="text-xl font-medium mb-1">{line.en}</p>
+                            <p className={`text-sm italic ${isRight ? (isDarkMode ? 'text-blue-300/80' : 'opacity-70') : (isDarkMode ? 'text-zinc-400' : 'opacity-70')}`}>{line.sr}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+               </section>
+
+               {/* Grammar */}
+               <section className={`p-6 md:p-8 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                  <div className={`flex items-center justify-between mb-6 border-b pb-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
+                    <h2 className="text-2xl font-bold flex items-center gap-2"><Lightbulb className="text-amber-500"/> Објашњења</h2>
+                    <button 
+                      onClick={() => openHelp({ tip: 'full_grammar', grammar: activeEpisode.grammar })} 
+                      className={`p-3 rounded-full transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                      title="Питај АИ о граматици"
+                    >
+                      <HelpCircle size={20} />
+                    </button>
+                  </div>
+                  <div className="space-y-6">
+                    {activeEpisode.grammar?.map((item, idx) => (
+                      <div key={idx}>
+                        <span className={`font-bold block text-lg mb-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>{item.title}</span> 
+                        <p className={`text-lg ${isDarkMode ? 'text-zinc-200' : 'text-stone-800'}`}>{item.explanation}</p>
+                      </div>
+                    ))}
+                  </div>
+               </section>
+            </div>
+          ) : (
+            <div className={`p-12 rounded-3xl border text-center ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+              <BookOpen className="mx-auto mb-4 text-stone-400 dark:text-zinc-600" size={48} />
+              <h3 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-zinc-200' : 'text-stone-800'}`}>Нема изабране лекције</h3>
+              <p className={`mb-6 ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>Изаберите или креирајте лекцију на картици "Лекције".</p>
+              <button onClick={() => setActiveTab('studio')} className="px-6 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500 transition-all active:scale-95">
+                Иди на Лекције
+              </button>
+            </div>
+          )
+        )}
+
+        {/* 3. DRILLS TAB */}
+        {activeTab === 'drills' && (
+          isLoadingActiveEpisode ? (
+            <div className="py-16 text-center text-stone-500 dark:text-zinc-400">
+              <Loader2 className="animate-spin mx-auto mb-4 text-blue-600 dark:text-blue-400" size={36} />
+              <p className="text-lg font-medium">Учитавање вежби...</p>
+            </div>
+          ) : activeEpisode ? (
+            <div className="space-y-6 animate-in fade-in">
+              <header className="mb-6">
+                <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Вежбе</h2>
+                  <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>
+                    Слушајте и понављајте. (Енглески {'->'} Српски {'->'} Енглески)
+                  </p>
+              </header>
+              
+              <div className="space-y-4">
+                {activeEpisode.drills?.map((drill, idx) => {
+                  const dId = `drill_${idx}`;
+                  const isMastered = progress.mastered[dId];
+                  const isRevealed = drillRevealed[dId] || isMastered;
+                  const v = drill.gender === 'M' ? 'Puck' : 'Leda';
+
+                  return (
+                    <div key={dId} className={`rounded-2xl p-5 border flex items-center justify-between gap-4 transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+                      <div className="flex items-start gap-4 flex-1">
+                        <div className={`mt-1 flex items-center justify-center w-6 h-6 rounded-full border shrink-0 ${
+                          isMastered 
+                            ? (isDarkMode ? 'bg-blue-950 border-blue-500 text-blue-400' : 'bg-blue-100 border-blue-500 text-blue-600') 
+                            : (isDarkMode ? 'border-zinc-700 text-transparent' : 'border-stone-300 text-transparent')
+                        }`}>
+                          <Check size={14} strokeWidth={isMastered ? 3 : 2} />
+                        </div>
+                        <div className="flex-1">
+                          {!isRevealed ? (
+                            <button 
+                              onClick={() => setDrillRevealed(prev => ({...prev, [dId]: true}))} 
+                              className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors ${
+                                isDarkMode 
+                                  ? 'bg-blue-950/60 text-blue-400 border border-blue-800/50 hover:bg-blue-900/60' 
+                                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                              }`}
+                            >
+                              <Eye size={16} /> Прикажи текст
+                            </button>
+                          ) : (
+                            <div>
+                              <p className={`font-medium text-xl mb-1 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{drill.en}</p>
+                              <p className={`italic text-sm ${isDarkMode ? 'text-zinc-400' : 'opacity-60'}`}>{drill.sr}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Play and Help Buttons Wrapper */}
+                      <div className="flex gap-2 shrink-0">
+                        <button 
+                          onClick={() => openHelp({ tip: 'drill', ...drill })}
+                          className={`p-4 rounded-full border transition-all ${isDarkMode ? 'bg-zinc-800 text-blue-400 border-zinc-700 hover:bg-zinc-700' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}
+                        >
+                          <HelpCircle size={20} />
+                        </button>
+                        <button 
+                          onClick={() => handlePlayAudio(dId, [{ text: drill.en, voice: v }, { text: drill.sr, voice: v }, { text: drill.en, voice: v }], () => markDrillCompleted(dId))}
+                          className={`p-4 rounded-full border transition-all ${
+                            playingId === dId 
+                              ? (isDarkMode ? 'bg-blue-950 text-blue-400 border-blue-800' : 'bg-blue-100 text-blue-600 border-blue-200') 
+                              : (isDarkMode ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700' : 'bg-stone-50 text-stone-600 hover:bg-stone-100')
+                          }`}
+                        >
+                          {playingId === dId ? <Pause size={20} /> : <Volume2 size={20} />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className={`p-12 rounded-3xl border text-center ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+              <Layers className="mx-auto mb-4 text-stone-400 dark:text-zinc-600" size={48} />
+              <h3 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-zinc-200' : 'text-stone-800'}`}>Нема изабране лекције</h3>
+              <p className={`mb-6 ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>Изаберите или креирајте лекцију на картици "Лекције".</p>
+              <button onClick={() => setActiveTab('studio')} className="px-6 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500 transition-all active:scale-95">
+                Иди на Лекције
+              </button>
+            </div>
+          )
+        )}
+
+        {/* 4. QUIZ TAB */}
+        {activeTab === 'quiz' && (
+          isLoadingActiveEpisode ? (
+            <div className="py-16 text-center text-stone-500 dark:text-zinc-400">
+              <Loader2 className="animate-spin mx-auto mb-4 text-blue-600 dark:text-blue-400" size={36} />
+              <p className="text-lg font-medium">Учитавање квиза...</p>
+            </div>
+          ) : activeEpisode ? (
+            <div className="space-y-10 animate-in fade-in">
+              <header className="mb-6">
+                <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Квиз</h2>
+                <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>Сложите речи у реченицу.</p>
+              </header>
+
+             {quizData.map((q, idx) => {
+                const status = progress.quizGraded[q.id]; 
+                const selectedWordIds = progress.quizAnswers[q.id] || [];
+                const availableWords = q.wordObjects.filter(w => !selectedWordIds.includes(w.id));
+                
+                // Figure out exactly what string the user has built so far
+                const currentAttemptText = selectedWordIds
+                  .map(id => q.wordObjects.find(w => w.id === id)?.text)
+                  .filter(Boolean).join(' ');
+
+                const selectWord = (wId) => {
+                  if (status === 'correct') return;
+                  updateQuizState(q.id, [...selectedWordIds, wId]);
+                };
+                
+                const deselectWord = (wId) => {
+                  if (status === 'correct') return;
+                  updateQuizState(q.id, selectedWordIds.filter(id => id !== wId));
+                };
+
+                const handleDragEnd = (event) => {
+                  const { active, over } = event;
+                  if (!over || active.id === over.id) return;
+
+                  const oldIndex = selectedWordIds.indexOf(active.id);
+                  const newIndex = selectedWordIds.indexOf(over.id);
+                  const newArray = arrayMove(selectedWordIds, oldIndex, newIndex);
+                  updateQuizState(q.id, newArray);
+                };
+
+                return (
+                  <div key={q.id} className={`p-6 rounded-3xl border shadow-sm ${status === 'correct' ? (isDarkMode ? 'bg-emerald-950/20 border-emerald-500/50' : 'bg-emerald-50 border-emerald-200') : status === 'incorrect' ? (isDarkMode ? 'bg-red-950/20 border-red-500/50' : 'bg-red-50 border-red-200') : (isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200')}`}>
+                    <div className="mb-6 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xl font-medium ${isDarkMode ? 'text-zinc-500' : 'opacity-40'}`}>{idx + 1}.</span>
+                        {(!q.type || q.type === 'translation') ? (
+                          <span className={`text-xl font-medium ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{q.prompt}</span>
+                        ) : (
+                          <button 
+                            onClick={() => handlePlayAudio(`quiz-listen-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }])}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all active:scale-95 ${
+                              playingId === `quiz-listen-${q.id}` 
+                                ? 'bg-blue-600 text-white' 
+                                : (isDarkMode ? 'bg-blue-950/50 text-blue-400 border border-blue-800/60 hover:bg-blue-900/60' : 'bg-blue-100 text-blue-700 hover:bg-blue-200')
+                            }`}
+                          >
+                            {playingId === `quiz-listen-${q.id}` ? <Pause size={20} /> : <Volume2 size={20} />}
+                            {q.prompt || "Слушајте и сложите реченицу"}
+                          </button>
+                        )}
+                      </div>
+                      <button 
+                        onClick={() => openHelp({ 
+                          tip: 'quiz', 
+                          ...q, 
+                          userCurrentAnswer: currentAttemptText || "Ништа још није унето.",
+                          status: status,
+                          isGraded: progress.quizGraded[q.id] || null,
+                          lastWrongAttempt: progress.quizAttempts?.[q.id] || null
+                        })} 
+                        className={`p-2 rounded-full transition-all hover:scale-110 ${isDarkMode ? 'text-blue-400 bg-blue-950/40 hover:bg-blue-900/50' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                      >
+                        <HelpCircle size={20} />
+                      </button>
+                    </div>
+                    {status === 'correct' ? (
+                      <div className={`p-4 rounded-xl border mb-6 ${isDarkMode ? 'bg-emerald-950/60 border-emerald-800/80' : 'bg-emerald-100/50 border-emerald-300'}`}>
+                         <p className="text-2xl font-medium text-emerald-700 dark:text-emerald-400">{q.target}</p>
+                      </div>
+                    ) : (
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SortableContext items={selectedWordIds} strategy={horizontalListSortingStrategy}>
+                          <div className={`min-h-[4rem] p-3 rounded-xl border-2 border-dashed flex flex-wrap content-start gap-2 mb-6 ${isDarkMode ? 'border-zinc-700 bg-zinc-950/50' : 'border-stone-300 bg-stone-50/50'}`}>
+                            {selectedWordIds.length === 0 && <span className={`m-auto text-sm ${isDarkMode ? 'text-zinc-500' : 'opacity-50'}`}>Кликните на речи испод...</span>}
+                            {selectedWordIds.map(id => {
+                              const wObj = q.wordObjects.find(w => w.id === id);
+                              return wObj && (
+                                <SortableWordTile
+                                  key={id}
+                                  id={id}
+                                  wordText={wObj.text}
+                                  onRemove={() => deselectWord(id)}
+                                />
+                              );
+                            })}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    )}
+
+                    {!status || status === 'incorrect' ? (
+                      <div className="flex flex-wrap gap-2 mb-6 min-h-[3rem]">
+                        {availableWords.map(wObj => (
+                          <button 
+                            key={wObj.id} 
+                            onClick={() => selectWord(wObj.id)} 
+                            className={`px-4 py-2 rounded-lg text-lg font-medium border-b-4 shadow-sm active:scale-95 transition-all ${
+                              isDarkMode 
+                                ? 'bg-zinc-800 text-zinc-100 border-zinc-950 hover:bg-zinc-750' 
+                                : 'bg-white text-stone-900 border-stone-300'
+                            }`}
+                          >
+                            {wObj.text}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="min-h-[3rem] mb-6 flex items-center text-emerald-600 dark:text-emerald-400 font-bold text-lg"><CheckCircle className="mr-2"/> Одлично!</div>
+                    )}
+
+                    <div className={`flex justify-end border-t pt-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
+                      {status === 'incorrect' && <p className="mr-auto my-auto font-bold text-red-500 dark:text-red-400">Није тачно. Покушајте поново.</p>}
+                      {status !== 'correct' ? (
+                        <button onClick={() => handleQuizCheck(q)} disabled={selectedWordIds.length === 0} className="px-6 py-3 rounded-xl font-bold bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-500 transition-all active:scale-95">Провери</button>
+                      ) : (
+                        <button 
+                          onClick={() => handlePlayAudio(`quiz-rev-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }])} 
+                          className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all ${
+                            isDarkMode 
+                              ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800 hover:bg-emerald-900/80' 
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}
+                        >
+                          <Volume2 size={20}/> Слушај поново
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {/* 4. QUIZ TAB */}
-        {activeTab === 'quiz' && activeEpisode && (
-          <div className="space-y-10 animate-in fade-in">
-            <header className="mb-6">
-              <h2 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>Квиз</h2>
-              <p className={`text-lg ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>Сложите речи у реченицу.</p>
-            </header>
-
-           {quizData.map((q, idx) => {
-              const status = progress.quizGraded[q.id]; 
-              const selectedWordIds = progress.quizAnswers[q.id] || [];
-              const availableWords = q.wordObjects.filter(w => !selectedWordIds.includes(w.id));
-              
-              // Figure out exactly what string the user has built so far
-              const currentAttemptText = selectedWordIds
-                .map(id => q.wordObjects.find(w => w.id === id)?.text)
-                .filter(Boolean).join(' ');
-
-              const selectWord = (wId) => {
-                if (status === 'correct') return;
-                updateQuizState(q.id, [...selectedWordIds, wId]);
-              };
-              
-              const deselectWord = (wId) => {
-                if (status === 'correct') return;
-                updateQuizState(q.id, selectedWordIds.filter(id => id !== wId));
-              };
-
-              const handleDragEnd = (event) => {
-                const { active, over } = event;
-                if (!over || active.id === over.id) return;
-
-                const oldIndex = selectedWordIds.indexOf(active.id);
-                const newIndex = selectedWordIds.indexOf(over.id);
-                const newArray = arrayMove(selectedWordIds, oldIndex, newIndex);
-                updateQuizState(q.id, newArray);
-              };
-
-              return (
-                <div key={q.id} className={`p-6 rounded-3xl border shadow-sm ${status === 'correct' ? (isDarkMode ? 'bg-emerald-950/20 border-emerald-500/50' : 'bg-emerald-50 border-emerald-200') : status === 'incorrect' ? (isDarkMode ? 'bg-red-950/20 border-red-500/50' : 'bg-red-50 border-red-200') : (isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200')}`}>
-                  <div className="mb-6 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className={`text-xl font-medium ${isDarkMode ? 'text-zinc-500' : 'opacity-40'}`}>{idx + 1}.</span>
-                      {(!q.type || q.type === 'translation') ? (
-                        <span className={`text-xl font-medium ${isDarkMode ? 'text-zinc-100' : 'text-stone-900'}`}>{q.prompt}</span>
-                      ) : (
-                        <button 
-                          onClick={() => handlePlayAudio(`quiz-listen-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }])}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all active:scale-95 ${
-                            playingId === `quiz-listen-${q.id}` 
-                              ? 'bg-blue-600 text-white' 
-                              : (isDarkMode ? 'bg-blue-950/50 text-blue-400 border border-blue-800/60 hover:bg-blue-900/60' : 'bg-blue-100 text-blue-700 hover:bg-blue-200')
-                          }`}
-                        >
-                          {playingId === `quiz-listen-${q.id}` ? <Pause size={20} /> : <Volume2 size={20} />}
-                          {q.prompt || "Слушајте и сложите реченицу"}
-                        </button>
-                      )}
-                    </div>
-                    <button 
-                      onClick={() => openHelp({ 
-                        tip: 'quiz', 
-                        ...q, 
-                        userCurrentAnswer: currentAttemptText || "Ништа још није унето.",
-                        status: status,
-                        isGraded: progress.quizGraded[q.id] || null,
-                        lastWrongAttempt: progress.quizAttempts?.[q.id] || null
-                      })} 
-                      className={`p-2 rounded-full transition-all hover:scale-110 ${isDarkMode ? 'text-blue-400 bg-blue-950/40 hover:bg-blue-900/50' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
-                    >
-                      <HelpCircle size={20} />
-                    </button>
-                  </div>
-                  {status === 'correct' ? (
-                    <div className={`p-4 rounded-xl border mb-6 ${isDarkMode ? 'bg-emerald-950/60 border-emerald-800/80' : 'bg-emerald-100/50 border-emerald-300'}`}>
-                       <p className="text-2xl font-medium text-emerald-700 dark:text-emerald-400">{q.target}</p>
-                    </div>
-                  ) : (
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                      <SortableContext items={selectedWordIds} strategy={horizontalListSortingStrategy}>
-                        <div className={`min-h-[4rem] p-3 rounded-xl border-2 border-dashed flex flex-wrap content-start gap-2 mb-6 ${isDarkMode ? 'border-zinc-700 bg-zinc-950/50' : 'border-stone-300 bg-stone-50/50'}`}>
-                          {selectedWordIds.length === 0 && <span className={`m-auto text-sm ${isDarkMode ? 'text-zinc-500' : 'opacity-50'}`}>Кликните на речи испод...</span>}
-                          {selectedWordIds.map(id => {
-                            const wObj = q.wordObjects.find(w => w.id === id);
-                            return wObj && (
-                              <SortableWordTile
-                                key={id}
-                                id={id}
-                                wordText={wObj.text}
-                                onRemove={() => deselectWord(id)}
-                              />
-                            );
-                          })}
-                        </div>
-                      </SortableContext>
-                    </DndContext>
-                  )}
-
-                  {!status || status === 'incorrect' ? (
-                    <div className="flex flex-wrap gap-2 mb-6 min-h-[3rem]">
-                      {availableWords.map(wObj => (
-                        <button 
-                          key={wObj.id} 
-                          onClick={() => selectWord(wObj.id)} 
-                          className={`px-4 py-2 rounded-lg text-lg font-medium border-b-4 shadow-sm active:scale-95 transition-all ${
-                            isDarkMode 
-                              ? 'bg-zinc-800 text-zinc-100 border-zinc-950 hover:bg-zinc-750' 
-                              : 'bg-white text-stone-900 border-stone-300'
-                          }`}
-                        >
-                          {wObj.text}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="min-h-[3rem] mb-6 flex items-center text-emerald-600 dark:text-emerald-400 font-bold text-lg"><CheckCircle className="mr-2"/> Одлично!</div>
-                  )}
-
-                  <div className={`flex justify-end border-t pt-4 ${isDarkMode ? 'border-zinc-800' : 'border-stone-100'}`}>
-                    {status === 'incorrect' && <p className="mr-auto my-auto font-bold text-red-500 dark:text-red-400">Није тачно. Покушајте поново.</p>}
-                    {status !== 'correct' ? (
-                      <button onClick={() => handleQuizCheck(q)} disabled={selectedWordIds.length === 0} className="px-6 py-3 rounded-xl font-bold bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-500 transition-all active:scale-95">Провери</button>
-                    ) : (
-                      <button 
-                        onClick={() => handlePlayAudio(`quiz-rev-${q.id}`, [{ text: q.target, voice: q.gender === 'M' ? 'Puck' : 'Leda' }])} 
-                        className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all ${
-                          isDarkMode 
-                            ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800 hover:bg-emerald-900/80' 
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}
-                      >
-                        <Volume2 size={20}/> Слушај поново
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          ) : (
+            <div className={`p-12 rounded-3xl border text-center ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-stone-200'}`}>
+              <CheckCircle className="mx-auto mb-4 text-stone-400 dark:text-zinc-600" size={48} />
+              <h3 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-zinc-200' : 'text-stone-800'}`}>Нема изабране лекције</h3>
+              <p className={`mb-6 ${isDarkMode ? 'text-zinc-400' : 'text-stone-500'}`}>Изаберите или креирајте лекцију на картици "Лекције".</p>
+              <button onClick={() => setActiveTab('studio')} className="px-6 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500 transition-all active:scale-95">
+                Иди на Лекције
+              </button>
+            </div>
+          )
         )}
 
         {/* 5. DICTIONARY TAB */}
